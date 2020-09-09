@@ -16,8 +16,8 @@ func NewQueryDemultiplexer(handlers ...query.Handler) query.Demultiplexer {
 	return internal.NewQueryDemultiplexer(handlers...)
 }
 
-func CommandHandlerFunc(commandName string, handler func(context.Context, []byte) error) command.Handler {
-	return internal.CommandHandlerFunc(commandName, handler)
+func CommandHandlerFunc(commandName string, handle func(context.Context, []byte) error) command.Handler {
+	return internal.CommandHandlerFunc(commandName, handle)
 }
 
 func QueryHandlerFunc(queryName string, handle func(context.Context, []byte) ([]byte, error)) query.Handler {
