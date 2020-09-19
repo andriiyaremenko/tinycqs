@@ -10,14 +10,35 @@ type CommandDemultiplexer struct {
 	handlers []c.Handler
 }
 
-func (hf *CommandDemultiplexer) Handle(ctx context.Context, command *c.Command) error {
+func (hf *CommandDemultiplexer) Handle(ctx context.Context, command string, payload []byte) error {
 	for _, h := range hf.handlers {
-		if h.CommandName() == command.Name {
-			return h.Handle(ctx, command)
+		if h.CommandName() == command {
+			return h.Handle(ctx, payload)
 		}
 	}
 
-	return c.NewErrCommandHandlerNotFound(command.Name)
+	return c.NewErrCommandHandlerNotFound(command)
+}
+
+func (hf *CommandDemultiplexer) HandleOnly(ctx context.Context, only []string, command string, payload []byte) error {
+	exists := false
+	for _, c := range only {
+		if exists = c == command; exists {
+			break
+		}
+	}
+
+	if !exists {
+		return nil
+	}
+
+	for _, h := range hf.handlers {
+		if h.CommandName() == command {
+			return h.Handle(ctx, payload)
+		}
+	}
+
+	return c.NewErrCommandHandlerNotFound(command)
 }
 
 func NewCommandDemultiplexer(handlers ...c.Handler) c.Demultiplexer {
@@ -33,8 +54,8 @@ func (ch *CommandHandler) CommandName() string {
 	return ch.commandName
 }
 
-func (ch *CommandHandler) Handle(ctx context.Context, command *c.Command) error {
-	return ch.handle(ctx, command.Body)
+func (ch *CommandHandler) Handle(ctx context.Context, payload []byte) error {
+	return ch.handle(ctx, payload)
 }
 
 func CommandHandlerFunc(commandName string, handle func(context.Context, []byte) error) c.Handler {

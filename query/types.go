@@ -4,16 +4,11 @@ import (
 	"context"
 )
 
-type Query struct {
-	Name string
-	Body []byte
-}
-
 type Handler interface {
 	QueryName() string
-	Handle(ctx context.Context, query *Query) ([]byte, error)
+	Handle(ctx context.Context, payload []byte) ([]byte, error)
 }
 
 type Demultiplexer interface {
-	Handle(ctx context.Context, query *Query) ([]byte, error)
+	Handle(ctx context.Context, query string, payload []byte) ([]byte, error)
 }

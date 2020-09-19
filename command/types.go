@@ -4,16 +4,12 @@ import (
 	"context"
 )
 
-type Command struct {
-	Name string
-	Body []byte
-}
-
 type Handler interface {
 	CommandName() string
-	Handle(ctx context.Context, command *Command) error
+	Handle(ctx context.Context, payload []byte) error
 }
 
 type Demultiplexer interface {
-	Handle(ctx context.Context, command *Command) error
+	Handle(ctx context.Context, command string, payload []byte) error
+	HandleOnly(ctx context.Context, only []string, command string, payload []byte) error
 }
