@@ -11,5 +11,5 @@ type Handler interface {
 
 type Demultiplexer interface {
 	Handle(ctx context.Context, command string, payload []byte) error
-	HandleOnly(ctx context.Context, only []string, command string, payload []byte) error
+	HandleOnly(ctx context.Context, command string, payload []byte, only ...string) error
 }

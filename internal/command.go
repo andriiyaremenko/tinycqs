@@ -20,7 +20,7 @@ func (hf *CommandDemultiplexer) Handle(ctx context.Context, command string, payl
 	return c.NewErrCommandHandlerNotFound(command)
 }
 
-func (hf *CommandDemultiplexer) HandleOnly(ctx context.Context, only []string, command string, payload []byte) error {
+func (hf *CommandDemultiplexer) HandleOnly(ctx context.Context, command string, payload []byte, only ...string) error {
 	exists := false
 	for _, c := range only {
 		if exists = c == command; exists {

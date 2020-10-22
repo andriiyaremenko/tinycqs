@@ -85,7 +85,7 @@ func TestCommandDemultiplexerCanHandleOnlyListOfCommands(t *testing.T) {
 		CommandHandlerFunc("test_1", handler),
 	)
 
-	assert.NoError(c.HandleOnly(ctx, []string{"test_1"}, "test_1", nil), "no error should be returned")
+	assert.NoError(c.HandleOnly(ctx, "test_1", nil, "test_1"), "no error should be returned")
 }
 
 func TestCommandDemultiplexerHandleOnlyIgnoresCommandsAbsentInList(t *testing.T) {
@@ -100,7 +100,7 @@ func TestCommandDemultiplexerHandleOnlyIgnoresCommandsAbsentInList(t *testing.T)
 		CommandHandlerFunc("test_1", handler),
 	)
 
-	assert.NoError(c.HandleOnly(ctx, []string{"test_1"}, "test_2", nil), "no error should be returned")
+	assert.NoError(c.HandleOnly(ctx, "test_2", nil, "test_1"), "no error should be returned")
 }
 
 func TestCommandDemultiplexerHandleOnlyShouldErrIfNoHandlersMatch(t *testing.T) {
@@ -115,7 +115,7 @@ func TestCommandDemultiplexerHandleOnlyShouldErrIfNoHandlersMatch(t *testing.T) 
 		CommandHandlerFunc("test_1", handler),
 	)
 
-	err := c.HandleOnly(ctx, []string{"test_1", "test_2"}, "test_2", nil)
+	err := c.HandleOnly(ctx, "test_2", nil, "test_1", "test_2")
 	assert.EqualError(err, "handler not found for command test_2", "error should be returned")
 	assert.IsType(&command.ErrCommandHandlerNotFound{}, err, "error should be of type *command.ErrCommandHandlerNotFound")
 }
