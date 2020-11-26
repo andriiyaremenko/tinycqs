@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 
 	q "github.com/andriiyaremenko/tinycqs/query"
 )
@@ -19,6 +20,20 @@ func (hf *QueryDemultiplexer) Handle(ctx context.Context,
 	}
 
 	return nil, q.NewErrQueryHandlerNotFound(query)
+}
+
+func (hf *QueryDemultiplexer) HandleJSONEncoded(ctx context.Context,
+	query string, v interface{}, payload []byte) error {
+	b, err := hf.Handle(ctx, query, payload)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(b, v); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func NewQueryDemultiplexer(handlers ...q.Handler) q.Demultiplexer {

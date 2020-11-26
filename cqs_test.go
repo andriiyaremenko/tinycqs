@@ -2,6 +2,7 @@ package tinycqs
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/andriiyaremenko/tinycqs/command"
@@ -38,6 +39,25 @@ func TestCanCreateQueryDemultiplexer(t *testing.T) {
 	v, err := c.Handle(ctx, "test_1", nil)
 	assert.NoError(err, "no error should be returned")
 	assert.Equal("works", string(v))
+}
+
+func TestCanCreateQueryDemultiplexerAndHandleJSONEncoded(t *testing.T) {
+	t.Log("Should be able to create query demultiplexer and handle query")
+
+	ctx := context.TODO()
+	assert := assert.New(t)
+	handler := func(ctx context.Context, _ []byte) ([]byte, error) {
+		return json.Marshal("works")
+	}
+	c := NewQueryDemultiplexer(
+		QueryHandlerFunc("test_1", handler),
+	)
+
+	var str string
+	err := c.HandleJSONEncoded(ctx, "test_1", &str, nil)
+
+	assert.NoError(err, "no error should be returned")
+	assert.Equal("works", str)
 }
 
 func TestCommandDemultiplexerShouldErrIfNoHandlersMatch(t *testing.T) {
