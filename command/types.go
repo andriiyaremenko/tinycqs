@@ -4,12 +4,17 @@ import (
 	"context"
 )
 
+type Event interface {
+	EventType() string
+	Payload() []byte
+}
+
 type Handler interface {
-	CommandName() string
+	EventType() string
 	Handle(ctx context.Context, payload []byte) error
 }
 
-type Demultiplexer interface {
-	Handle(ctx context.Context, command string, payload []byte) error
-	HandleOnly(ctx context.Context, command string, payload []byte, only ...string) error
+type Command interface {
+	Handle(ctx context.Context, event Event) error
+	HandleOnly(ctx context.Context, event Event, only ...string) error
 }
