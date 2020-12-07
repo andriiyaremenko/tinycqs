@@ -16,19 +16,19 @@ func (done doneEv) Err() error {
 	return nil
 }
 
-type Ev struct {
-	EType string
-	P     []byte
+type E struct {
+	EType    string
+	EPayload []byte
 }
 
-func (e Ev) EventType() string {
+func (e E) EventType() string {
 	return e.EType
 }
 
-func (e Ev) Payload() []byte {
-	return e.P
+func (e E) Payload() []byte {
+	return e.EPayload
 }
 
-func (e Ev) Err() error {
+func (e E) Err() error {
 	return nil
 }

@@ -38,12 +38,12 @@ func (ch *commandHandler) Handle(ctx context.Context, payload []byte) <-chan Eve
 		for {
 			select {
 			case <-ctx.Done():
-				events <- NewErrEvent(&Ev{EType: ch.eventType, P: payload}, ctx.Err())
+				events <- NewErrEvent(&E{EType: ch.eventType, EPayload: payload}, ctx.Err())
 
 				return
 			default:
 				if err := ch.handle(ctx, payload); err != nil {
-					events <- NewErrEvent(&Ev{EType: ch.eventType, P: payload}, err)
+					events <- NewErrEvent(&E{EType: ch.eventType, EPayload: payload}, err)
 
 					return
 				}

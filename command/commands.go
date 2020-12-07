@@ -47,16 +47,15 @@ func (hf *commands) HandleOnly(ctx context.Context, event Event, only ...string)
 		return NewErrEvent(event, &ErrCommandHandlerNotFound{event.EventType()})
 	}
 
-	evChan := h.Handle(ctx, event.Payload())
-
 	for {
 		select {
 		case <-ctx.Done():
 			return NewErrEvent(event, ctx.Err())
-		case ev := <-evChan:
+		case ev := <-h.Handle(ctx, event.Payload()):
 			if ev == nil {
 				return Done
 			}
+
 			return ev
 		}
 	}
