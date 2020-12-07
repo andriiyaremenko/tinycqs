@@ -4,6 +4,8 @@ import (
 	"fmt"
 )
 
+var ErrorEventType = func(eventType string) string { return fmt.Sprintf("Error#%s", eventType) }
+
 func NewErrEvent(event Event, err error) *ErrEvent {
 	return &ErrEvent{event, err}
 }
@@ -14,7 +16,7 @@ type ErrEvent struct {
 }
 
 func (err *ErrEvent) EventType() string {
-	return fmt.Sprintf("Error#%s", err.event.EventType())
+	return ErrorEventType(err.event.EventType())
 }
 
 func (err *ErrEvent) Payload() []byte {
