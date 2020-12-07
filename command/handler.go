@@ -6,15 +6,15 @@ import (
 
 type CommandHandler struct {
 	EType      string
-	HandleFunc func(ctx context.Context, payload []byte) <-chan Event
+	HandleFunc func(ctx context.Context, event Event) <-chan Event
 }
 
 func (ch *CommandHandler) EventType() string {
 	return ch.EType
 }
 
-func (ch *CommandHandler) Handle(ctx context.Context, payload []byte) <-chan Event {
-	return ch.HandleFunc(ctx, payload)
+func (ch *CommandHandler) Handle(ctx context.Context, event Event) <-chan Event {
+	return ch.HandleFunc(ctx, event)
 }
 
 func CommandHandlerFunc(eventType string, handle func(context.Context, []byte) error) Handler {
@@ -30,7 +30,7 @@ func (ch *commandHandler) EventType() string {
 	return ch.eventType
 }
 
-func (ch *commandHandler) Handle(ctx context.Context, payload []byte) <-chan Event {
+func (ch *commandHandler) Handle(ctx context.Context, event Event) <-chan Event {
 	events := make(chan Event)
 
 	go func() {
@@ -38,12 +38,12 @@ func (ch *commandHandler) Handle(ctx context.Context, payload []byte) <-chan Eve
 		for {
 			select {
 			case <-ctx.Done():
-				events <- NewErrEvent(&E{EType: ch.eventType, EPayload: payload}, ctx.Err())
+				events <- NewErrEvent(event, ctx.Err())
 
 				return
 			default:
-				if err := ch.handle(ctx, payload); err != nil {
-					events <- NewErrEvent(&E{EType: ch.eventType, EPayload: payload}, err)
+				if err := ch.handle(ctx, event.Payload()); err != nil {
+					events <- NewErrEvent(event, err)
 
 					return
 				}

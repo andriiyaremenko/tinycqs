@@ -12,7 +12,7 @@ type Event interface {
 
 type Handler interface {
 	EventType() string
-	Handle(ctx context.Context, payload []byte) <-chan Event
+	Handle(ctx context.Context, event Event) <-chan Event
 }
 
 type CommandsWorker interface {

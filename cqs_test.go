@@ -196,7 +196,7 @@ func TestCommandHandleOnlyShouldNotChainEvents(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -209,7 +209,7 @@ func TestCommandHandleOnlyShouldNotChainEvents(t *testing.T) {
 	handler2WasCalled := false
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -242,7 +242,7 @@ func TestCommandHandleChainEvents(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -255,7 +255,7 @@ func TestCommandHandleChainEvents(t *testing.T) {
 	handler2WasCalled := false
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -288,7 +288,7 @@ func TestCommandHandleChainEventsShouldExhaustOrErr(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -300,7 +300,7 @@ func TestCommandHandleChainEventsShouldExhaustOrErr(t *testing.T) {
 		}}
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -333,7 +333,7 @@ func TestCommandHandleChainEventsSeveralEvents(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -349,7 +349,7 @@ func TestCommandHandleChainEventsSeveralEvents(t *testing.T) {
 	handler2WasCalled := &wasCalledCounter{}
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -391,7 +391,7 @@ func TestCommandHandleShouldRespectContext(t *testing.T) {
 
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -406,7 +406,7 @@ func TestCommandHandleShouldRespectContext(t *testing.T) {
 		}}
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -445,7 +445,7 @@ func TestCommandHandleOnlyShouldRespectContext(t *testing.T) {
 
 	handler := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -474,7 +474,7 @@ func TestWorkerShouldStartAndHandleCommands(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)
@@ -490,7 +490,7 @@ func TestWorkerShouldStartAndHandleCommands(t *testing.T) {
 	handler2WasCalled := &wasCalledCounter{}
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
 			respCh := make(chan command.Event)
 			go func() {
 				defer close(respCh)

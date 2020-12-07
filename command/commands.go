@@ -58,7 +58,7 @@ func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) 
 		select {
 		case <-ctx.Done():
 			return NewErrEvent(event, ctx.Err())
-		case ev := <-h.Handle(ctx, event.Payload()):
+		case ev := <-h.Handle(ctx, event):
 			if ev == nil {
 				return Done
 			}
@@ -78,7 +78,7 @@ func (c *commands) Handle(ctx context.Context, event Event) Event {
 		return NewErrEvent(event, &ErrCommandHandlerNotFound{event.EventType()})
 	}
 
-	events := h.Handle(ctx, event.Payload())
+	events := h.Handle(ctx, event)
 
 	if err := c.handleNext(ctx, events); err != nil {
 		return NewErrEvent(event, err)
@@ -116,7 +116,7 @@ func (c *commands) handleNext(ctx context.Context, events <-chan Event) error {
 				return err
 			}
 
-			events = c.mergeEvents(events, h.Handle(ctx, event.Payload()))
+			events = c.mergeEvents(events, h.Handle(ctx, event))
 		}
 	}
 }
