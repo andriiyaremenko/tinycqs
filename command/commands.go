@@ -26,11 +26,18 @@ func NewCommands(handlers ...Handler) (Commands, error) {
 }
 
 type commands struct {
-	handlers   []Handler
-	channelCap int
+	handlers         []Handler
+	concurrencyLimit int
 }
 
-func (hf *commands) HandleOnly(ctx context.Context, event Event, only ...string) Event {
+func (c *commands) ConcurrencyLimit() int {
+	return c.concurrencyLimit
+}
+func (c *commands) SetConcurrencyLimit(limit int) {
+	c.concurrencyLimit = limit
+}
+
+func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) Event {
 	exists := false
 	for _, c := range only {
 		if exists = c == event.EventType(); exists {
@@ -42,7 +49,7 @@ func (hf *commands) HandleOnly(ctx context.Context, event Event, only ...string)
 		return Done
 	}
 
-	h, ok := hf.getHandle(event)
+	h, ok := c.getHandle(event)
 	if !ok {
 		return NewErrEvent(event, &ErrCommandHandlerNotFound{event.EventType()})
 	}
@@ -61,28 +68,28 @@ func (hf *commands) HandleOnly(ctx context.Context, event Event, only ...string)
 	}
 }
 
-func (hf *commands) Handle(ctx context.Context, event Event) Event {
+func (c *commands) Handle(ctx context.Context, event Event) Event {
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer cancel()
 
-	h, ok := hf.getHandle(event)
+	h, ok := c.getHandle(event)
 	if !ok {
 		return NewErrEvent(event, &ErrCommandHandlerNotFound{event.EventType()})
 	}
 
 	events := h.Handle(ctx, event.Payload())
 
-	if err := hf.handleNext(ctx, events); err != nil {
+	if err := c.handleNext(ctx, events); err != nil {
 		return NewErrEvent(event, err)
 	}
 
 	return Done
 }
 
-func (hf *commands) sealed() {}
+func (c *commands) sealed() {}
 
-func (hf *commands) handleNext(ctx context.Context, events <-chan Event) error {
+func (c *commands) handleNext(ctx context.Context, events <-chan Event) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -96,7 +103,7 @@ func (hf *commands) handleNext(ctx context.Context, events <-chan Event) error {
 				continue
 			}
 
-			h, ok := hf.getHandle(event)
+			h, ok := c.getHandle(event)
 			err := event.Err()
 			isUnhandledEvent := !ok && err == nil
 			isUnhandledError := !ok && err != nil
@@ -109,13 +116,13 @@ func (hf *commands) handleNext(ctx context.Context, events <-chan Event) error {
 				return err
 			}
 
-			events = hf.mergeEvents(events, h.Handle(ctx, event.Payload()))
+			events = c.mergeEvents(events, h.Handle(ctx, event.Payload()))
 		}
 	}
 }
 
-func (hf *commands) getHandle(event Event) (Handler, bool) {
-	for _, h := range hf.handlers {
+func (c *commands) getHandle(event Event) (Handler, bool) {
+	for _, h := range c.handlers {
 		if h.EventType() == event.EventType() {
 			return h, true
 		}
@@ -123,8 +130,8 @@ func (hf *commands) getHandle(event Event) (Handler, bool) {
 	return nil, false
 }
 
-func (hf *commands) mergeEvents(cs ...<-chan Event) <-chan Event {
-	out := make(chan Event, hf.channelCap)
+func (c *commands) mergeEvents(cs ...<-chan Event) <-chan Event {
+	out := make(chan Event, c.concurrencyLimit)
 	var wg sync.WaitGroup
 
 	wg.Add(len(cs))

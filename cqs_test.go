@@ -463,6 +463,83 @@ func TestCommandHandleOnlyShouldRespectContext(t *testing.T) {
 	assert.IsType(&command.ErrEvent{}, err, "error should be of type *command.ErrEvent")
 }
 
+func TestWorkerShouldStartAndHandleCommands(t *testing.T) {
+	t.Log("Command Worker should start and Handle commands")
+
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	assert := assert.New(t)
+	handler1 := &command.CommandHandler{
+		EType: "test_1",
+		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				respCh <- command.E{EType: "test_2"}
+				respCh <- command.E{EType: "test_2"}
+				respCh <- command.E{EType: "test_2"}
+				respCh <- command.E{EType: "test_3"}
+			}()
+
+			return respCh
+		}}
+	handler2WasCalled := &wasCalledCounter{}
+	handler2 := &command.CommandHandler{
+		EType: "test_2",
+		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				handler2WasCalled.increase()
+				respCh <- command.E{EType: "test_3"}
+			}()
+
+			return respCh
+		}}
+
+	handler3WasCalled := &wasCalledCounter{}
+	handlerFunc3 := func(ctx context.Context, _ []byte) error {
+		handler3WasCalled.increase()
+		return nil
+	}
+	c, _ := command.NewCommandsWithConcurrencyLimit(
+		20,
+		handler1,
+		handler2,
+		command.CommandHandlerFunc("test_3", handlerFunc3),
+	)
+	eventSink := func(e command.Event) {
+		t.Log(e)
+	}
+
+	w := command.NewWorker(ctx, eventSink, c)
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.Handle(command.E{EType: "test_1"})
+		assert.NoError(err, "no error should be returned")
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.Handle(command.E{EType: "test_1"})
+		assert.NoError(err, "no error should be returned")
+	}()
+
+	wg.Wait()
+	time.Sleep(time.Second)
+	assert.Equal(6, handler2WasCalled.getCount(), "second handler should have been called three times")
+	assert.Equal(8, handler3WasCalled.getCount(), "third handler should have been called four times")
+}
+
 type wasCalledCounter struct {
 	mu    sync.Mutex
 	count int
@@ -472,4 +549,10 @@ func (cc *wasCalledCounter) increase() {
 	cc.mu.Lock()
 	cc.count++
 	cc.mu.Unlock()
+}
+
+func (cc *wasCalledCounter) getCount() int {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	return cc.count
 }

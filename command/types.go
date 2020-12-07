@@ -18,7 +18,7 @@ type Handler interface {
 type CommandsWorker interface {
 	sealed()
 
-	Handle(event Event)
+	Handle(event Event) error
 }
 
 type Commands interface {
@@ -26,4 +26,6 @@ type Commands interface {
 
 	Handle(ctx context.Context, event Event) Event
 	HandleOnly(ctx context.Context, event Event, only ...string) Event
+	ConcurrencyLimit() int
+	SetConcurrencyLimit(limit int)
 }
