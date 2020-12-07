@@ -4,6 +4,14 @@ import (
 	"fmt"
 )
 
+type ErrIncorrectHandler struct {
+	handler Handler
+}
+
+func (err *ErrIncorrectHandler) Error() string {
+	return fmt.Sprintf("query handler %#v has incorrect format", err.handler)
+}
+
 type ErrQueryHandlerNotFound struct {
 	queryName string
 }

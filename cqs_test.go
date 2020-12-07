@@ -3,6 +3,7 @@ package tinycqs
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"github.com/andriiyaremenko/tinycqs/command"
@@ -10,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestEvInplementsEvent(t *testing.T) {
+func TestEvImplementsEvent(t *testing.T) {
 	t.Log("Ev should implement Event interface")
 
 	assert := assert.New(t)
@@ -23,29 +24,37 @@ func TestCanCreateCommand(t *testing.T) {
 	t.Log("Should be able to create command and handle command")
 
 	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
 	assert := assert.New(t)
 	handler := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c := command.NewCommand(
+	c, _ := command.NewCommands(
 		command.CommandHandlerFunc("test_1", handler),
 	)
 
-	assert.NoError(c.Handle(ctx, command.Ev{Type: "test_1"}), "no error should be returned")
+	assert.NoError(c.Handle(ctx, command.Ev{EType: "test_1"}).Err(), "no error should be returned")
 }
 
 func TestCanCreateQuery(t *testing.T) {
 	t.Log("Should be able to create query and handle query")
 
 	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
 	assert := assert.New(t)
 	handler := func(ctx context.Context, _ []byte) ([]byte, error) {
 		return []byte("works"), nil
 	}
-	c := query.NewQuery(
+	q, _ := query.NewQueries(
 		query.QueryHandlerFunc("test_1", handler),
 	)
-	v, err := c.Handle(ctx, "test_1", nil)
+	v, err := q.Handle(ctx, "test_1", nil)
 	assert.NoError(err, "no error should be returned")
 	assert.Equal("works", string(v))
 }
@@ -54,16 +63,20 @@ func TestCanCreateQueryAndHandleJSONEncoded(t *testing.T) {
 	t.Log("Should be able to create query and handle query")
 
 	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
 	assert := assert.New(t)
 	handler := func(ctx context.Context, _ []byte) ([]byte, error) {
 		return json.Marshal("works")
 	}
-	c := query.NewQuery(
+	q, _ := query.NewQueries(
 		query.QueryHandlerFunc("test_1", handler),
 	)
 
 	var str string
-	err := c.HandleJSONEncoded(ctx, "test_1", &str, nil)
+	err := q.HandleJSONEncoded(ctx, "test_1", &str, nil)
 
 	assert.NoError(err, "no error should be returned")
 	assert.Equal("works", str)
@@ -73,30 +86,39 @@ func TestCommandShouldErrIfNoHandlersMatch(t *testing.T) {
 	t.Log("Command should error if ho handlers exists matching command")
 
 	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
 	assert := assert.New(t)
 	handler := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c := command.NewCommand(
+	c, _ := command.NewCommands(
 		command.CommandHandlerFunc("test_1", handler),
 	)
-	err := c.Handle(ctx, command.Ev{Type: "test_2"})
-	assert.EqualError(err, "handler not found for command test_2", "error should be returned")
-	assert.IsType(&command.ErrCommandHandlerNotFound{}, err, "error should be of type *command.ErrCommandHandlerNotFound")
+	err := c.Handle(ctx, command.Ev{EType: "test_2"})
+	assert.EqualError(err.Err(), "failed to process event test_2: handler not found for command test_2", "error should be returned")
+	assert.IsType(&command.ErrEvent{}, err, "error should be of type *command.ErrEvent")
+	assert.IsType(&command.ErrCommandHandlerNotFound{}, (err.(*command.ErrEvent)).Unwrap(), "underlying error should be of type *command.ErrCommandHandlerNotFound")
 }
 
 func TestQueryShouldErrIfNoHandlersMatch(t *testing.T) {
 	t.Log("Query should error if ho handlers exists matching query")
 
 	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
 	assert := assert.New(t)
 	handler := func(ctx context.Context, _ []byte) ([]byte, error) {
 		return []byte("works"), nil
 	}
-	c := query.NewQuery(
+	q, _ := query.NewQueries(
 		query.QueryHandlerFunc("test_1", handler),
 	)
-	v, err := c.Handle(ctx, "test_2", nil)
+	v, err := q.Handle(ctx, "test_2", nil)
 	assert.Nil(v, "value should be nil")
 	assert.EqualError(err, "handler not found for query test_2", "error should be returned")
 	assert.IsType(&query.ErrQueryHandlerNotFound{}, err, "error should be of type *query.ErrQueryHandlerNotFound")
@@ -106,45 +128,263 @@ func TestCommandCanHandleOnlyListOfCommands(t *testing.T) {
 	t.Log("Command should be able to handle commands in only list")
 
 	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
 	assert := assert.New(t)
 	handler := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c := command.NewCommand(
+	c, _ := command.NewCommands(
 		command.CommandHandlerFunc("test_1", handler),
 	)
 
-	assert.NoError(c.HandleOnly(ctx, command.Ev{Type: "test_1"}, "test_1"), "no error should be returned")
+	assert.NoError(c.HandleOnly(ctx, command.Ev{EType: "test_1"}, "test_1").Err(), "no error should be returned")
 }
 
 func TestCommandHandleOnlyIgnoresCommandsAbsentInList(t *testing.T) {
 	t.Log("Command should be able to ignore commands absent in only list")
 
 	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
 	assert := assert.New(t)
 	handler := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c := command.NewCommand(
+	c, _ := command.NewCommands(
 		command.CommandHandlerFunc("test_1", handler),
 	)
 
-	assert.NoError(c.HandleOnly(ctx, command.Ev{Type: "test_2"}, "test_1"), "no error should be returned")
+	assert.NoError(c.HandleOnly(ctx, command.Ev{EType: "test_2"}, "test_1").Err(), "no error should be returned")
 }
 
 func TestCommandHandleOnlyShouldErrIfNoHandlersMatch(t *testing.T) {
 	t.Log("Command should error if no handlers match command and command is in list")
 
 	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
 	assert := assert.New(t)
 	handler := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c := command.NewCommand(
+	c, _ := command.NewCommands(
 		command.CommandHandlerFunc("test_1", handler),
 	)
 
-	err := c.HandleOnly(ctx, command.Ev{Type: "test_2"}, "test_1", "test_2")
-	assert.EqualError(err, "handler not found for command test_2", "error should be returned")
-	assert.IsType(&command.ErrCommandHandlerNotFound{}, err, "error should be of type *command.ErrCommandHandlerNotFound")
+	err := c.HandleOnly(ctx, command.Ev{EType: "test_2"}, "test_1", "test_2")
+	assert.EqualError(err.Err(), "failed to process event test_2: handler not found for command test_2", "error should be returned")
+	assert.IsType(&command.ErrEvent{}, err, "error should be of type *command.ErrEvent")
+	assert.IsType(&command.ErrCommandHandlerNotFound{}, (err.(*command.ErrEvent)).Unwrap(), "underlying error should be of type *command.ErrCommandHandlerNotFound")
+}
+
+func TestCommandHandleOnlyShouldNotChainEvents(t *testing.T) {
+	t.Log("HandleOnly should ignore events chaining")
+
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	assert := assert.New(t)
+	handler1 := &command.CommandHandler{
+		EType: "test_1",
+		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				respCh <- command.Ev{EType: "test_2"}
+			}()
+
+			return respCh
+		}}
+	handler2WasCalled := false
+	handler2 := &command.CommandHandler{
+		EType: "test_2",
+		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				handler2WasCalled = true
+				respCh <- command.Ev{EType: "test_3"}
+			}()
+
+			return respCh
+		}}
+
+	c, _ := command.NewCommands(
+		handler1,
+		handler2,
+	)
+
+	err := c.HandleOnly(ctx, command.Ev{EType: "test_1"})
+	assert.NoError(err.Err(), "no error should be returned")
+	assert.False(handler2WasCalled, "second handler should not have been called")
+}
+
+func TestCommandHandleChainEvents(t *testing.T) {
+	t.Log("Command should be able to chain events")
+
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	assert := assert.New(t)
+	handler1 := &command.CommandHandler{
+		EType: "test_1",
+		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				respCh <- command.Ev{EType: "test_2"}
+			}()
+
+			return respCh
+		}}
+	handler2WasCalled := false
+	handler2 := &command.CommandHandler{
+		EType: "test_2",
+		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				handler2WasCalled = true
+				respCh <- command.Done
+			}()
+
+			return respCh
+		}}
+
+	c, _ := command.NewCommands(
+		handler1,
+		handler2,
+	)
+
+	err := c.Handle(ctx, command.Ev{EType: "test_1"})
+	assert.NoError(err.Err(), "no error should be returned")
+	assert.True(handler2WasCalled, "second handler should have been called")
+}
+
+func TestCommandHandleChainEventsShouldExhaustOrErr(t *testing.T) {
+	t.Log("Command should error if no handler found while chaining events")
+
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	assert := assert.New(t)
+	handler1 := &command.CommandHandler{
+		EType: "test_1",
+		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				respCh <- command.Ev{EType: "test_2"}
+			}()
+
+			return respCh
+		}}
+	handler2 := &command.CommandHandler{
+		EType: "test_2",
+		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				respCh <- command.Ev{EType: "test_3"}
+			}()
+
+			return respCh
+		}}
+
+	c, _ := command.NewCommands(
+		handler1,
+		handler2,
+	)
+
+	err := c.Handle(ctx, command.Ev{EType: "test_1"})
+	assert.EqualError(err.Err(), "failed to process event test_1: handler not found for command test_3", "error should be returned")
+	assert.IsType(&command.ErrEvent{}, err, "error should be of type *command.ErrEvent")
+	assert.IsType(&command.ErrCommandHandlerNotFound{}, (err.(*command.ErrEvent)).Unwrap(), "underlying error should be of type *command.ErrCommandHandlerNotFound")
+}
+
+func TestCommandHandleChainEventsSeveralEvents(t *testing.T) {
+	t.Log("Command should be able to chain events and handle several events from one handler")
+
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	assert := assert.New(t)
+	handler1 := &command.CommandHandler{
+		EType: "test_1",
+		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				respCh <- command.Ev{EType: "test_2"}
+				respCh <- command.Ev{EType: "test_2"}
+				respCh <- command.Ev{EType: "test_2"}
+				respCh <- command.Ev{EType: "test_3"}
+			}()
+
+			return respCh
+		}}
+	handler2WasCalled := &wasCalledCounter{}
+	handler2 := &command.CommandHandler{
+		EType: "test_2",
+		HandleFunc: func(ctx context.Context, _ []byte) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				handler2WasCalled.increase()
+				respCh <- command.Ev{EType: "test_3"}
+			}()
+
+			return respCh
+		}}
+
+	handler3WasCalled := &wasCalledCounter{}
+	handlerFunc3 := func(ctx context.Context, _ []byte) error {
+		handler3WasCalled.increase()
+		return nil
+	}
+	c, _ := command.NewCommandsWithConcurrencyLimit(
+		20,
+		handler1,
+		handler2,
+		command.CommandHandlerFunc("test_3", handlerFunc3),
+	)
+
+	err := c.Handle(ctx, command.Ev{EType: "test_1"})
+	assert.NoError(err.Err(), "no error should be returned")
+	assert.Equal(3, handler2WasCalled.count, "second handler should have been called three times")
+	assert.Equal(4, handler3WasCalled.count, "third handler should have been called four times")
+}
+
+type wasCalledCounter struct {
+	mu    sync.Mutex
+	count int
+}
+
+func (cc *wasCalledCounter) increase() {
+	cc.mu.Lock()
+	cc.count++
+	cc.mu.Unlock()
 }

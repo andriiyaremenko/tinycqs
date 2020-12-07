@@ -5,15 +5,21 @@ import (
 	"encoding/json"
 )
 
-func NewQuery(handlers ...Handler) Query {
-	return &query{handlers}
+func NewQueries(handlers ...Handler) (Queries, error) {
+	for _, h := range handlers {
+		if h.QueryName() == "" {
+			return nil, &ErrIncorrectHandler{h}
+		}
+	}
+
+	return &queries{handlers}, nil
 }
 
-type query struct {
+type queries struct {
 	handlers []Handler
 }
 
-func (hf *query) Handle(ctx context.Context,
+func (hf *queries) Handle(ctx context.Context,
 	query string, payload []byte) ([]byte, error) {
 	for _, h := range hf.handlers {
 		if h.QueryName() == query {
@@ -24,7 +30,7 @@ func (hf *query) Handle(ctx context.Context,
 	return nil, NewErrQueryHandlerNotFound(query)
 }
 
-func (hf *query) HandleJSONEncoded(ctx context.Context,
+func (hf *queries) HandleJSONEncoded(ctx context.Context,
 	query string, v interface{}, payload []byte) error {
 	b, err := hf.Handle(ctx, query, payload)
 	if err != nil {

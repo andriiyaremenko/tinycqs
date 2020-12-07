@@ -9,7 +9,7 @@ type Handler interface {
 	Handle(ctx context.Context, payload []byte) ([]byte, error)
 }
 
-type Query interface {
+type Queries interface {
 	Handle(ctx context.Context, query string, payload []byte) ([]byte, error)
 	HandleJSONEncoded(ctx context.Context, query string, v interface{}, payload []byte) error
 }
