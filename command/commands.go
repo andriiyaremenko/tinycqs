@@ -96,13 +96,17 @@ func (hf *commands) handleNext(ctx context.Context, events <-chan Event) error {
 				continue
 			}
 
-			if err := event.Err(); err != nil {
-				return err
+			h, ok := hf.getHandle(event)
+			err := event.Err()
+			isUnhandledEvent := !ok && err == nil
+			isUnhandledError := !ok && err != nil
+
+			if isUnhandledEvent {
+				return &ErrCommandHandlerNotFound{event.EventType()}
 			}
 
-			h, ok := hf.getHandle(event)
-			if !ok {
-				return &ErrCommandHandlerNotFound{event.EventType()}
+			if isUnhandledError {
+				return err
 			}
 
 			events = hf.mergeEvents(events, h.Handle(ctx, event.Payload()))

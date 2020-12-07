@@ -37,6 +37,30 @@ func (err *ErrEvent) Event() Event {
 	return err.event
 }
 
+type ErrDone struct {
+	Cause error
+}
+
+func (err *ErrDone) EventType() string {
+	return DoneEventType
+}
+
+func (err *ErrDone) Payload() []byte {
+	return nil
+}
+
+func (err *ErrDone) Err() error {
+	return err.Cause
+}
+
+func (err *ErrDone) Error() string {
+	return fmt.Sprintf("failed to process event %s: %s", err.EventType(), err.Unwrap())
+}
+
+func (err *ErrDone) Unwrap() error {
+	return err.Cause
+}
+
 type ErrIncorrectHandler struct {
 	handler Handler
 }

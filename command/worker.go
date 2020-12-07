@@ -2,21 +2,42 @@ package command
 
 import "context"
 
-func NewWorker(ctx context.Context, commands Commands) CommandsWorker {
-	return &worker{ctx, commands}
+func NewWorker(ctx context.Context, eventSink func(Event), commands Commands) CommandsWorker {
+	w := &worker{
+		ctx:       ctx,
+		eventSink: eventSink,
+		commands:  commands}
+
+	w.start()
+
+	return w
 }
 
 type worker struct {
-	ctx context.Context
-	c   Commands
+	ctx       context.Context
+	commands  Commands
+	eventPipe chan Event
+	eventSink func(event Event)
 }
 
-func (w *worker) HandleOnly(event Event, only ...string) Event {
-	return w.c.HandleOnly(w.ctx, event, only...)
+func (w *worker) start() {
+	go func() {
+		for {
+			select {
+			case <-w.ctx.Done():
+				w.eventSink(&ErrDone{Cause: w.ctx.Err()})
+				close(w.eventPipe)
+
+				return
+			case event := <-w.eventPipe:
+				w.eventSink(w.commands.Handle(w.ctx, event))
+			}
+		}
+	}()
 }
 
-func (w *worker) Handle(event Event) Event {
-	return w.c.Handle(w.ctx, event)
+func (w *worker) Handle(event Event) {
+	w.eventPipe <- event
 }
 
 func (w *worker) sealed() {}

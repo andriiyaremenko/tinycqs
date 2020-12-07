@@ -18,8 +18,7 @@ type Handler interface {
 type CommandsWorker interface {
 	sealed()
 
-	Handle(event Event) Event
-	HandleOnly(event Event, only ...string) Event
+	Handle(event Event)
 }
 
 type Commands interface {

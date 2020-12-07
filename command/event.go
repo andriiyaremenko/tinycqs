@@ -1,6 +1,7 @@
 package command
 
-const Done doneEv = "DONE"
+const DoneEventType string = "DONE"
+const Done doneEv = doneEv(DoneEventType)
 
 type doneEv string
 
