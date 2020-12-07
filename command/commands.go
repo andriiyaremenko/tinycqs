@@ -81,6 +81,8 @@ func (hf *commands) Handle(ctx context.Context, event Event) Event {
 	return Done
 }
 
+func (hf *commands) sealed() {}
+
 func (hf *commands) handleNext(ctx context.Context, events <-chan Event) error {
 	for {
 		select {
