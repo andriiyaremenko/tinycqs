@@ -3,6 +3,7 @@ package tinycqs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -317,7 +318,7 @@ func TestCommandHandleChainEventsShouldExhaustOrErr(t *testing.T) {
 	)
 
 	err := c.Handle(ctx, command.E{EType: "test_1"})
-	assert.EqualError(err.Err(), "failed to process event test_1: handler not found for command test_3", "error should be returned")
+	assert.EqualError(err.Err(), "failed to process event test_3: handler not found for command test_3", "error should be returned")
 	assert.IsType(&command.ErrEvent{}, err, "error should be of type *command.ErrEvent")
 	assert.IsType(&command.ErrCommandHandlerNotFound{}, (err.(*command.ErrEvent)).Unwrap(), "underlying error should be of type *command.ErrCommandHandlerNotFound")
 }
@@ -538,6 +539,188 @@ func TestWorkerShouldStartAndHandleCommands(t *testing.T) {
 	time.Sleep(time.Second)
 	assert.Equal(6, handler2WasCalled.getCount(), "second handler should have been called three times")
 	assert.Equal(8, handler3WasCalled.getCount(), "third handler should have been called four times")
+}
+
+func TestCommandHandleChainEventsShouldUseErrorHandlers(t *testing.T) {
+	t.Log("Command should be able to chain events and use registered error handlers")
+
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	assert := assert.New(t)
+	handler1 := &command.CommandHandler{
+		EType: "test_1",
+		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				respCh <- command.E{EType: "test_2"}
+				respCh <- command.E{EType: "test_2"}
+				respCh <- command.E{EType: "test_2"}
+				respCh <- command.NewErrEvent(e, errors.New("some error"))
+				respCh <- command.E{EType: "test_3"}
+			}()
+
+			return respCh
+		}}
+	handler2WasCalled := &wasCalledCounter{}
+	handler2 := &command.CommandHandler{
+		EType: "test_2",
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				handler2WasCalled.increase()
+				respCh <- command.E{EType: "test_3"}
+			}()
+
+			return respCh
+		}}
+
+	handler3WasCalled := &wasCalledCounter{}
+	handlerFunc3 := func(ctx context.Context, _ []byte) error {
+		handler3WasCalled.increase()
+		return nil
+	}
+
+	handlerErr := &command.CommandHandler{
+		EType: command.ErrorEventType("test_1"),
+		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+				respCh <- command.Done
+			}()
+
+			return respCh
+		}}
+	c, _ := command.NewCommandsWithConcurrencyLimit(
+		20,
+		handler1,
+		handler2,
+		handlerErr,
+		command.CommandHandlerFunc("test_3", handlerFunc3),
+	)
+
+	err := c.Handle(ctx, command.E{EType: "test_1"})
+	assert.NoError(err.Err(), "no error should be returned")
+	assert.Equal(3, handler2WasCalled.count, "second handler should have been called three times")
+	assert.Equal(4, handler3WasCalled.count, "third handler should have been called four times")
+}
+
+func TestCommandHandleChainEventsShouldUseGlobalErrHandler(t *testing.T) {
+	t.Log("Command should be able to chain events and use registered global error handler")
+
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	assert := assert.New(t)
+	handler1 := &command.CommandHandler{
+		EType: "test_1",
+		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				respCh <- command.E{EType: "test_2"}
+				respCh <- command.E{EType: "test_2"}
+				respCh <- command.E{EType: "test_2"}
+				respCh <- command.NewErrEvent(e, errors.New("some error"))
+				respCh <- command.E{EType: "test_3"}
+			}()
+
+			return respCh
+		}}
+	handler2WasCalled := &wasCalledCounter{}
+	handler2 := &command.CommandHandler{
+		EType: "test_2",
+		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+
+				handler2WasCalled.increase()
+				respCh <- command.E{EType: "test_3"}
+			}()
+
+			return respCh
+		}}
+
+	handler3WasCalled := &wasCalledCounter{}
+	handlerFunc3 := func(ctx context.Context, _ []byte) error {
+		handler3WasCalled.increase()
+		return nil
+	}
+
+	handlerErr := &command.CommandHandler{
+		EType: command.CatchAllErrorEventType,
+		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+				respCh <- command.Done
+			}()
+
+			return respCh
+		}}
+	c, _ := command.NewCommandsWithConcurrencyLimit(
+		20,
+		handler1,
+		handler2,
+		handlerErr,
+		command.CommandHandlerFunc("test_3", handlerFunc3),
+	)
+
+	err := c.Handle(ctx, command.E{EType: "test_1"})
+	assert.NoError(err.Err(), "no error should be returned")
+	assert.Equal(3, handler2WasCalled.count, "second handler should have been called three times")
+	assert.Equal(4, handler3WasCalled.count, "third handler should have been called four times")
+}
+
+func TestCommandYouCAnUseOnlyOneUseGlobalErrHandler(t *testing.T) {
+	t.Log("Command should restrict only one global error handler")
+
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	assert := assert.New(t)
+	handlerErr1 := &command.CommandHandler{
+		EType: command.CatchAllErrorEventType,
+		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+				respCh <- command.Done
+			}()
+
+			return respCh
+		}}
+	handlerErr2 := &command.CommandHandler{
+		EType: command.CatchAllErrorEventType,
+		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
+			respCh := make(chan command.Event)
+			go func() {
+				defer close(respCh)
+				respCh <- command.Done
+			}()
+
+			return respCh
+		}}
+
+	_, err := command.NewCommands(
+		handlerErr1,
+		handlerErr2,
+	)
+
+	assert.EqualError(err, command.MoreThanOneCatchAllErrorHandler.Error(), "error should be returned")
 }
 
 type wasCalledCounter struct {

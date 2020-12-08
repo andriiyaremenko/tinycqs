@@ -6,23 +6,26 @@ import (
 )
 
 func NewCommandsWithConcurrencyLimit(limit int, handlers ...Handler) (Commands, error) {
+	globalErrHandlersN := 0
 	for _, h := range handlers {
+		if h.EventType() == CatchAllErrorEventType {
+			globalErrHandlersN++
+		}
+
 		if h.EventType() == "" {
 			return nil, &ErrIncorrectHandler{h}
 		}
+	}
+
+	if globalErrHandlersN > 1 {
+		return nil, MoreThanOneCatchAllErrorHandler
 	}
 
 	return &commands{handlers, limit}, nil
 }
 
 func NewCommands(handlers ...Handler) (Commands, error) {
-	for _, h := range handlers {
-		if h.EventType() == "" {
-			return nil, &ErrIncorrectHandler{h}
-		}
-	}
-
-	return &commands{handlers, 0}, nil
+	return NewCommandsWithConcurrencyLimit(0, handlers...)
 }
 
 type commands struct {
@@ -49,7 +52,7 @@ func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) 
 		return Done
 	}
 
-	h, ok := c.getHandle(event)
+	h, ok := c.getHandle(event.EventType())
 	if !ok {
 		return NewErrEvent(event, &ErrCommandHandlerNotFound{event.EventType()})
 	}
@@ -73,47 +76,46 @@ func (c *commands) Handle(ctx context.Context, event Event) Event {
 
 	defer cancel()
 
-	h, ok := c.getHandle(event)
+	h, ok := c.getHandle(event.EventType())
 	if !ok {
 		return NewErrEvent(event, &ErrCommandHandlerNotFound{event.EventType()})
 	}
 
 	events := h.Handle(ctx, event)
 
-	if err := c.handleNext(ctx, events); err != nil {
-		return NewErrEvent(event, err)
-	}
-
-	return Done
+	return c.handleNext(ctx, event, events)
 }
 
 func (c *commands) sealed() {}
 
-func (c *commands) handleNext(ctx context.Context, events <-chan Event) error {
+func (c *commands) handleNext(ctx context.Context, initialEvent Event, events <-chan Event) Event {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return NewErrEvent(initialEvent, ctx.Err())
 		case event, ok := <-events:
 			if !ok {
-				return nil
+				return Done
 			}
 
 			if event == nil || event == Done {
 				continue
 			}
 
-			h, ok := c.getHandle(event)
+			h, ok := c.getHandle(event.EventType())
 			err := event.Err()
 			isUnhandledEvent := !ok && err == nil
 			isUnhandledError := !ok && err != nil
 
 			if isUnhandledEvent {
-				return &ErrCommandHandlerNotFound{event.EventType()}
+				return NewErrEvent(event, &ErrCommandHandlerNotFound{event.EventType()})
 			}
 
 			if isUnhandledError {
-				return err
+				h, ok = c.getHandle(CatchAllErrorEventType)
+				if !ok {
+					return event
+				}
 			}
 
 			events = c.mergeEvents(events, h.Handle(ctx, event))
@@ -121,9 +123,9 @@ func (c *commands) handleNext(ctx context.Context, events <-chan Event) error {
 	}
 }
 
-func (c *commands) getHandle(event Event) (Handler, bool) {
+func (c *commands) getHandle(eventType string) (Handler, bool) {
 	for _, h := range c.handlers {
-		if h.EventType() == event.EventType() {
+		if h.EventType() == eventType {
 			return h, true
 		}
 	}

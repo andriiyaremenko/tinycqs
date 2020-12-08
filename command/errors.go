@@ -4,6 +4,10 @@ import (
 	"fmt"
 )
 
+var MoreThanOneCatchAllErrorHandler = fmt.Errorf(`you can use only one handler for "%s" event`, CatchAllErrorEventType)
+
+const CatchAllErrorEventType = "Error#*"
+
 var ErrorEventType = func(eventType string) string { return fmt.Sprintf("Error#%s", eventType) }
 
 func NewErrEvent(event Event, err error) *ErrEvent {

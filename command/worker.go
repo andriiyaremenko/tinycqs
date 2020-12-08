@@ -45,6 +45,13 @@ func (w *worker) Handle(event Event) error {
 	return nil
 }
 
+func (w *worker) IsRunning() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	return w.started
+}
+
 func (w *worker) start() {
 	if w.started {
 		return
@@ -65,7 +72,6 @@ func (w *worker) start() {
 				w.mu.Lock()
 
 				w.started = false
-				w.eventSink(&ErrDone{Cause: w.ctx.Err()})
 				close(w.eventPipe)
 
 				w.mu.Unlock()

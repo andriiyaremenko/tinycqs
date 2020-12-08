@@ -18,6 +18,7 @@ type Handler interface {
 type CommandsWorker interface {
 	sealed()
 
+	IsRunning() bool
 	Handle(event Event) error
 }
 
