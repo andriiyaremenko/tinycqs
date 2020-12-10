@@ -2,6 +2,8 @@ package command
 
 import (
 	"fmt"
+	"strings"
+	"sync"
 )
 
 var MoreThanOneCatchAllErrorHandler = fmt.Errorf(`you can use only one handler for "%s" event`, CatchAllErrorEventType)
@@ -43,28 +45,66 @@ func (err *ErrEvent) Event() Event {
 	return err.event
 }
 
-type ErrDone struct {
-	Cause error
+func NewErrAggregatedEvent(initialEvent Event) *ErrAggregatedEvent {
+	return &ErrAggregatedEvent{initialEvent: initialEvent}
 }
 
-func (err *ErrDone) EventType() string {
-	return DoneEventType
+type ErrAggregatedEvent struct {
+	mu sync.RWMutex
+
+	initialEvent Event
+	errors       []error
 }
 
-func (err *ErrDone) Payload() []byte {
-	return nil
+func (err *ErrAggregatedEvent) EventType() string {
+	return ErrorEventType(err.initialEvent.EventType())
 }
 
-func (err *ErrDone) Err() error {
-	return err.Cause
+func (err *ErrAggregatedEvent) Payload() []byte {
+	return err.initialEvent.Payload()
 }
 
-func (err *ErrDone) Error() string {
-	return fmt.Sprintf("failed to process event %s: %s", err.EventType(), err.Unwrap())
+func (err *ErrAggregatedEvent) Err() error {
+	err.mu.RLock()
+	defer err.mu.RUnlock()
+
+	if len(err.errors) == 0 {
+		return nil
+	}
+
+	var sb strings.Builder
+
+	sb.WriteByte('\n')
+
+	for _, e := range err.errors {
+		sb.WriteByte('\t')
+		sb.WriteString(e.Error())
+		sb.WriteByte('\n')
+	}
+
+	return fmt.Errorf(
+		"failed to process event %s: aggregated error occurred: [%s]",
+		err.initialEvent.EventType(), sb.String())
 }
 
-func (err *ErrDone) Unwrap() error {
-	return err.Cause
+func (err *ErrAggregatedEvent) Error() string {
+	return err.Err().Error()
+}
+
+func (err *ErrAggregatedEvent) Event() Event {
+	return err.initialEvent
+}
+
+func (err *ErrAggregatedEvent) Inner() []error {
+	err.mu.RLock()
+	defer err.mu.RUnlock()
+	return err.errors
+}
+
+func (err *ErrAggregatedEvent) Append(errs ...error) {
+	err.mu.Lock()
+	defer err.mu.Unlock()
+	err.errors = append(err.errors, errs...)
 }
 
 type ErrIncorrectHandler struct {
@@ -81,4 +121,24 @@ type ErrCommandHandlerNotFound struct {
 
 func (err *ErrCommandHandlerNotFound) Error() string {
 	return fmt.Sprintf("handler not found for command %s", err.commandName)
+}
+
+const NilEvent ErrNilEvent = "NilEvent"
+
+type ErrNilEvent string
+
+func (err ErrNilEvent) EventType() string {
+	return ErrorEventType(string(err))
+}
+
+func (err ErrNilEvent) Payload() []byte {
+	return nil
+}
+
+func (err ErrNilEvent) Err() error {
+	return err
+}
+
+func (err ErrNilEvent) Error() string {
+	return "got event with value of nil"
 }

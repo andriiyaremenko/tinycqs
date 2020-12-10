@@ -197,29 +197,23 @@ func TestCommandHandleOnlyShouldNotChainEvents(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
-				respCh <- command.E{EType: "test_2"}
+				r.Write(command.E{EType: "test_2"})
 			}()
-
-			return respCh
 		}}
 	handler2WasCalled := false
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
 				handler2WasCalled = true
-				respCh <- command.E{EType: "test_3"}
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 
 	c, _ := command.NewCommands(
@@ -243,29 +237,22 @@ func TestCommandHandleChainEvents(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
-				respCh <- command.E{EType: "test_2"}
+				r.Write(command.E{EType: "test_2"})
 			}()
-
-			return respCh
 		}}
 	handler2WasCalled := false
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
 				handler2WasCalled = true
-				respCh <- command.Done
 			}()
-
-			return respCh
 		}}
 
 	c, _ := command.NewCommands(
@@ -289,27 +276,21 @@ func TestCommandHandleChainEventsShouldExhaustOrErr(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
-				respCh <- command.E{EType: "test_2"}
+				r.Write(command.E{EType: "test_2"})
 			}()
-
-			return respCh
 		}}
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
-				respCh <- command.E{EType: "test_3"}
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 
 	c, _ := command.NewCommands(
@@ -318,9 +299,8 @@ func TestCommandHandleChainEventsShouldExhaustOrErr(t *testing.T) {
 	)
 
 	err := c.Handle(ctx, command.E{EType: "test_1"})
-	assert.EqualError(err.Err(), "failed to process event test_3: handler not found for command test_3", "error should be returned")
-	assert.IsType(&command.ErrEvent{}, err, "error should be of type *command.ErrEvent")
-	assert.IsType(&command.ErrCommandHandlerNotFound{}, (err.(*command.ErrEvent)).Unwrap(), "underlying error should be of type *command.ErrCommandHandlerNotFound")
+	assert.EqualError(err.Err(), "failed to process event test_1: aggregated error occurred: [\n\thandler not found for command test_3\n]", "error should be returned")
+	assert.IsType(&command.ErrAggregatedEvent{}, err, "error should be of type *command.ErrEvent")
 }
 
 func TestCommandHandleChainEventsSeveralEvents(t *testing.T) {
@@ -334,32 +314,26 @@ func TestCommandHandleChainEventsSeveralEvents(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_3"}
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 	handler2WasCalled := &wasCalledCounter{}
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
 				handler2WasCalled.increase()
-				respCh <- command.E{EType: "test_3"}
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 
 	handler3WasCalled := &wasCalledCounter{}
@@ -384,7 +358,7 @@ func TestCommandHandleShouldRespectContext(t *testing.T) {
 	t.Log("Command Handle should error if context was cancelled")
 
 	ctx := context.TODO()
-	ctx, cancel := context.WithTimeout(ctx, time.Second*2)
+	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*200)
 
 	defer cancel()
 
@@ -392,34 +366,28 @@ func TestCommandHandleShouldRespectContext(t *testing.T) {
 
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_3"}
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
-				respCh <- command.E{EType: "test_3"}
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 
 	handlerFunc3 := func(ctx context.Context, _ []byte) error {
-		time.Sleep(time.Second * 4)
+		time.Sleep(time.Millisecond * 400)
 		return nil
 	}
 	c, _ := command.NewCommandsWithConcurrencyLimit(
@@ -438,7 +406,7 @@ func TestCommandHandleOnlyShouldRespectContext(t *testing.T) {
 	t.Log("Command HandleOnly should error if context was cancelled")
 
 	ctx := context.TODO()
-	ctx, cancel := context.WithTimeout(ctx, time.Second*2)
+	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*200)
 
 	defer cancel()
 
@@ -446,16 +414,13 @@ func TestCommandHandleOnlyShouldRespectContext(t *testing.T) {
 
 	handler := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
-				time.Sleep(time.Second * 4)
-				respCh <- command.E{EType: "test_2"}
+				time.Sleep(time.Millisecond * 400)
+				r.Write(command.E{EType: "test_2"})
 			}()
-
-			return respCh
 		}}
 	c, _ := command.NewCommands(handler)
 
@@ -475,32 +440,25 @@ func TestWorkerShouldStartAndHandleCommands(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
-
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_3"}
+				defer r.Done()
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 	handler2WasCalled := &wasCalledCounter{}
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
 				handler2WasCalled.increase()
-				respCh <- command.E{EType: "test_3"}
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 
 	handler3WasCalled := &wasCalledCounter{}
@@ -536,7 +494,7 @@ func TestWorkerShouldStartAndHandleCommands(t *testing.T) {
 	}()
 
 	wg.Wait()
-	time.Sleep(time.Second)
+	time.Sleep(time.Millisecond * 200)
 	assert.Equal(6, handler2WasCalled.getCount(), "second handler should have been called three times")
 	assert.Equal(8, handler3WasCalled.getCount(), "third handler should have been called four times")
 }
@@ -552,33 +510,27 @@ func TestCommandHandleChainEventsShouldUseErrorHandlers(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.NewErrEvent(e, errors.New("some error"))
-				respCh <- command.E{EType: "test_3"}
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.NewErrEvent(e, errors.New("some error")))
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 	handler2WasCalled := &wasCalledCounter{}
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
 				handler2WasCalled.increase()
-				respCh <- command.E{EType: "test_3"}
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 
 	handler3WasCalled := &wasCalledCounter{}
@@ -589,14 +541,10 @@ func TestCommandHandleChainEventsShouldUseErrorHandlers(t *testing.T) {
 
 	handlerErr := &command.CommandHandler{
 		EType: command.ErrorEventType("test_1"),
-		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			go func() {
-				defer close(respCh)
-				respCh <- command.Done
+				r.Done()
 			}()
-
-			return respCh
 		}}
 	c, _ := command.NewCommandsWithConcurrencyLimit(
 		20,
@@ -623,33 +571,27 @@ func TestCommandHandleChainEventsShouldUseGlobalErrHandler(t *testing.T) {
 	assert := assert.New(t)
 	handler1 := &command.CommandHandler{
 		EType: "test_1",
-		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.E{EType: "test_2"}
-				respCh <- command.NewErrEvent(e, errors.New("some error"))
-				respCh <- command.E{EType: "test_3"}
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.E{EType: "test_2"})
+				r.Write(command.NewErrEvent(e, errors.New("some error")))
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 	handler2WasCalled := &wasCalledCounter{}
 	handler2 := &command.CommandHandler{
 		EType: "test_2",
-		HandleFunc: func(ctx context.Context, _ command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			go func() {
-				defer close(respCh)
+				defer r.Done()
 
 				handler2WasCalled.increase()
-				respCh <- command.E{EType: "test_3"}
+				r.Write(command.E{EType: "test_3"})
 			}()
-
-			return respCh
 		}}
 
 	handler3WasCalled := &wasCalledCounter{}
@@ -660,14 +602,10 @@ func TestCommandHandleChainEventsShouldUseGlobalErrHandler(t *testing.T) {
 
 	handlerErr := &command.CommandHandler{
 		EType: command.CatchAllErrorEventType,
-		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			go func() {
-				defer close(respCh)
-				respCh <- command.Done
+				r.Done()
 			}()
-
-			return respCh
 		}}
 	c, _ := command.NewCommandsWithConcurrencyLimit(
 		20,
@@ -694,25 +632,17 @@ func TestCommandYouCAnUseOnlyOneUseGlobalErrHandler(t *testing.T) {
 	assert := assert.New(t)
 	handlerErr1 := &command.CommandHandler{
 		EType: command.CatchAllErrorEventType,
-		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			go func() {
-				defer close(respCh)
-				respCh <- command.Done
+				r.Done()
 			}()
-
-			return respCh
 		}}
 	handlerErr2 := &command.CommandHandler{
 		EType: command.CatchAllErrorEventType,
-		HandleFunc: func(ctx context.Context, e command.Event) <-chan command.Event {
-			respCh := make(chan command.Event)
+		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			go func() {
-				defer close(respCh)
-				respCh <- command.Done
+				r.Done()
 			}()
-
-			return respCh
 		}}
 
 	_, err := command.NewCommands(

@@ -10,9 +10,19 @@ type Event interface {
 	Err() error
 }
 
+type EventReader interface {
+	Read() <-chan Event
+	Close()
+}
+
+type EventWriter interface {
+	Write(e Event)
+	Done()
+}
+
 type Handler interface {
 	EventType() string
-	Handle(ctx context.Context, event Event) <-chan Event
+	Handle(ctx context.Context, w EventWriter, event Event)
 }
 
 type CommandsWorker interface {

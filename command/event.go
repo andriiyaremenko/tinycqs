@@ -1,7 +1,11 @@
 package command
 
-const DoneEventType string = "DONE"
-const Done doneEv = doneEv(DoneEventType)
+const (
+	DoneEventType string = "DONE"
+
+	Done        doneEv = doneEv(DoneEventType)
+	doneWriting doneEv = doneEv("WORKER_DONE_WRITING")
+)
 
 type doneEv string
 

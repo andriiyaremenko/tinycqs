@@ -6,15 +6,15 @@ import (
 
 type CommandHandler struct {
 	EType      string
-	HandleFunc func(ctx context.Context, event Event) <-chan Event
+	HandleFunc func(ctx context.Context, w EventWriter, e Event)
 }
 
 func (ch *CommandHandler) EventType() string {
 	return ch.EType
 }
 
-func (ch *CommandHandler) Handle(ctx context.Context, event Event) <-chan Event {
-	return ch.HandleFunc(ctx, event)
+func (ch *CommandHandler) Handle(ctx context.Context, w EventWriter, event Event) {
+	ch.HandleFunc(ctx, w, event)
 }
 
 func CommandHandlerFunc(eventType string, handle func(context.Context, []byte) error) Handler {
@@ -30,29 +30,24 @@ func (ch *commandHandler) EventType() string {
 	return ch.eventType
 }
 
-func (ch *commandHandler) Handle(ctx context.Context, event Event) <-chan Event {
-	events := make(chan Event)
-
+func (ch *commandHandler) Handle(ctx context.Context, w EventWriter, event Event) {
 	go func() {
-		defer close(events)
+		defer w.Done()
 		for {
 			select {
 			case <-ctx.Done():
-				events <- NewErrEvent(event, ctx.Err())
+				w.Write(NewErrEvent(event, ctx.Err()))
 
 				return
 			default:
 				if err := ch.handle(ctx, event.Payload()); err != nil {
-					events <- NewErrEvent(event, err)
+					w.Write(NewErrEvent(event, err))
 
 					return
 				}
 
-				events <- Done
 				return
 			}
 		}
 	}()
-
-	return events
 }
