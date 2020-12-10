@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-func newEventRW(ctx context.Context, limit int) *eventRW {
+func newEventRW(ctx context.Context, limit int) EventReader {
 	ctx, cancel := context.WithCancel(ctx)
 	return &eventRW{ctx: ctx, cancel: cancel, ch: make(chan Event, limit)}
 }
@@ -20,7 +20,22 @@ type eventRW struct {
 	writersWGMutex sync.Mutex
 }
 
-func (r *eventRW) Write(e Event) {
+func (r *eventRW) Read() <-chan Event {
+	return r.ch
+}
+
+func (r *eventRW) Close() {
+	r.once.Do(func() {
+		r.cancel()
+
+		r.writersWGMutex.Lock()
+		r.writersWG.Wait()
+		close(r.ch)
+		r.writersWGMutex.Unlock()
+	})
+}
+
+func (r *eventRW) write(e Event) {
 	select {
 	case <-r.ctx.Done():
 		r.Close()
@@ -44,21 +59,39 @@ func (r *eventRW) Write(e Event) {
 	}
 }
 
-func (r *eventRW) Read() <-chan Event {
-	return r.ch
+func (r *eventRW) done() {
+	r.write(doneWriting)
 }
 
-func (r *eventRW) Done() {
-	r.Write(doneWriting)
+func (r *eventRW) GetWriter() EventWriter {
+	return &eventW{eventRW: r}
 }
 
-func (r *eventRW) Close() {
+type eventW struct {
+	isDone bool
+	once   sync.Once
+	mu     sync.Mutex
+
+	eventRW *eventRW
+}
+
+func (r *eventW) Write(e Event) {
+	r.mu.Lock()
+
+	if !r.isDone {
+		r.eventRW.write(e)
+	}
+
+	r.mu.Unlock()
+}
+
+func (r *eventW) Done() {
 	r.once.Do(func() {
-		r.cancel()
+		r.mu.Lock()
 
-		r.writersWGMutex.Lock()
-		r.writersWG.Wait()
-		close(r.ch)
-		r.writersWGMutex.Unlock()
+		r.isDone = true
+
+		r.eventRW.done()
+		r.mu.Unlock()
 	})
 }

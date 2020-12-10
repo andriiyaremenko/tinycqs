@@ -61,7 +61,7 @@ func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) 
 
 	defer rw.Close()
 
-	h.Handle(ctx, rw, event)
+	h.Handle(ctx, rw.GetWriter(), event)
 
 	for {
 		select {
@@ -87,7 +87,7 @@ func (c *commands) Handle(ctx context.Context, event Event) Event {
 
 func (c *commands) sealed() {}
 
-func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw *eventRW) Event {
+func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventReader) Event {
 	h, ok := c.getHandle(initialEvent.EventType())
 	if !ok {
 		return NewErrEvent(initialEvent, &ErrCommandHandlerNotFound{initialEvent.EventType()})
@@ -96,7 +96,7 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw *event
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	h.Handle(ctx, rw, initialEvent)
+	h.Handle(ctx, rw.GetWriter(), initialEvent)
 
 	errAggregated := NewErrAggregatedEvent(initialEvent)
 	resultCh := make(chan Event)
@@ -150,7 +150,7 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw *event
 				continue
 			default:
 				wg.Add(1)
-				h.Handle(ctx, rw, event)
+				h.Handle(ctx, rw.GetWriter(), event)
 			}
 		case r := <-resultCh:
 			if r.Err() == nil {

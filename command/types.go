@@ -13,6 +13,8 @@ type Event interface {
 type EventReader interface {
 	Read() <-chan Event
 	Close()
+
+	GetWriter() EventWriter
 }
 
 type EventWriter interface {
