@@ -33,13 +33,6 @@ type commands struct {
 	cLimit   int
 }
 
-func (c *commands) ConcurrencyLimit() int {
-	return c.cLimit
-}
-func (c *commands) SetConcurrencyLimit(limit int) {
-	c.cLimit = limit
-}
-
 func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) Event {
 	exists := false
 	for _, c := range only {

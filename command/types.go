@@ -39,6 +39,4 @@ type Commands interface {
 
 	Handle(ctx context.Context, event Event) Event
 	HandleOnly(ctx context.Context, event Event, only ...string) Event
-	ConcurrencyLimit() int
-	SetConcurrencyLimit(limit int)
 }

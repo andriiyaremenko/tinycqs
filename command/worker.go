@@ -59,13 +59,12 @@ func (w *worker) start() {
 
 	w.mu.Lock()
 
-	w.eventPipe = make(chan Event, w.commands.ConcurrencyLimit())
+	w.eventPipe = make(chan Event)
 	w.started = true
 
 	w.mu.Unlock()
 
 	go func() {
-		concurrencyLimit := w.commands.ConcurrencyLimit()
 		var wg sync.WaitGroup
 
 		for {
@@ -88,22 +87,6 @@ func (w *worker) start() {
 
 					w.eventSink(w.commands.Handle(w.ctx, event))
 				}()
-			default:
-				newLimit := w.commands.ConcurrencyLimit()
-				if concurrencyLimit == newLimit {
-					continue
-				}
-
-				w.mu.Lock()
-
-				wg.Wait()
-
-				close(w.eventPipe)
-
-				w.eventPipe = make(chan Event, newLimit)
-				concurrencyLimit = newLimit
-
-				w.mu.Unlock()
 			}
 		}
 	}()
