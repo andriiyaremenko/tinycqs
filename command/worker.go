@@ -10,6 +10,8 @@ var (
 	WorkerStopped = errors.New("command worker is stopped")
 )
 
+// Returns `CommandWorker` based on `Commands`.
+// `eventSink` is used to channel all unhandled `error`s in form of `Event`
 func NewWorker(ctx context.Context, eventSink func(Event), commands Commands) CommandsWorker {
 	w := &worker{
 		ctx:       ctx,

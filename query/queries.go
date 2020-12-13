@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 )
 
+// Returns new `Queries` or `error`
 func NewQueries(handlers ...Handler) (Queries, error) {
 	for _, h := range handlers {
 		if h.QueryName() == "" {

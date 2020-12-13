@@ -5,6 +5,8 @@ import (
 	"sync"
 )
 
+// Returns new `Commands` with Concurrency Limit equals to `limit` or `error`
+// Concurrency Limit is amount of `Event`s that can be processed concurrently
 func NewCommandsWithConcurrencyLimit(limit int, handlers ...Handler) (Commands, error) {
 	globalErrHandlersN := 0
 	for _, h := range handlers {
@@ -24,6 +26,8 @@ func NewCommandsWithConcurrencyLimit(limit int, handlers ...Handler) (Commands, 
 	return &commands{handlers: handlers, cLimit: limit}, nil
 }
 
+// Returns new `Commands` with Concurrency Limit equals to `0` or `error`
+// Concurrency Limit is amount of `Event`s that can be processed concurrently
 func NewCommands(handlers ...Handler) (Commands, error) {
 	return NewCommandsWithConcurrencyLimit(0, handlers...)
 }

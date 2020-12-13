@@ -4,6 +4,8 @@ import (
 	"context"
 )
 
+// Returns `Handler` with `QueryName` equals `queryName`
+// and `Handle` based on `handle`
 func QueryHandlerFunc(queryName string,
 	handle func(context.Context, []byte) ([]byte, error)) Handler {
 	return &queryHandler{queryName, handle}

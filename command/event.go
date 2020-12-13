@@ -1,8 +1,16 @@
 package command
 
-const (
-	DoneEventType string = "DONE"
+import (
+	"fmt"
+)
 
+var ErrorEventType = func(eventType string) string { return fmt.Sprintf("Error#%s", eventType) }
+
+const (
+	DoneEventType          string = "DONE"
+	CatchAllErrorEventType string = "Error#*"
+
+	// `Event` returned as a result of successful processing `Event` or chain of `Event`s
 	Done        doneEv = doneEv(DoneEventType)
 	doneWriting doneEv = doneEv("WORKER_DONE_WRITING")
 )
@@ -21,6 +29,7 @@ func (done doneEv) Err() error {
 	return nil
 }
 
+// `E` implements `Event`
 type E struct {
 	EType    string
 	EPayload []byte
