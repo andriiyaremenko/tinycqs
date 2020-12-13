@@ -14,7 +14,7 @@ func (ch *CommandHandler) EventType() string {
 }
 
 func (ch *CommandHandler) Handle(ctx context.Context, w EventWriter, event Event) {
-	ch.HandleFunc(ctx, w, event)
+	go ch.HandleFunc(ctx, w, event)
 }
 
 func CommandHandlerFunc(eventType string, handle func(context.Context, []byte) error) Handler {
