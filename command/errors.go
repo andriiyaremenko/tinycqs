@@ -144,7 +144,7 @@ func (err *ErrCommandHandlerNotFound) Error() string {
 // `ErrNilEvent` instance
 const NilEvent ErrNilEvent = "NilEvent"
 
-// `error` type returned if `Error` equals `nil`
+// `error` type returned if `Event` equals `nil`
 // `ErrNilEvent` implements `error` and `Event`
 type ErrNilEvent string
 

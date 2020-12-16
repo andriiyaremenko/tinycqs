@@ -1,5 +1,9 @@
 # tinycqs
 
+This package is intended to help user separate ones workflow on commands and queries (CQS part of CQRS).  
+It also possible to chain commands into single workflow.  
+Each command is executed in separate gorutine, and each query is executed in same gorutine it was called.
+
 ## Commands
 `import "github.com/andriiyaremenko/tinycqs/command"`
 
@@ -24,7 +28,7 @@ var ErrorEventType = func(eventType string) string { return fmt.Sprintf("Error#%
 var MoreThanOneCatchAllErrorHandler = fmt.Errorf(`you can use only one handler for "%s" event`, CatchAllErrorEventType)
 ```
 ```go
-var	WorkerStopped = errors.New("command worker is stopped")
+var WorkerStopped = errors.New("command worker is stopped")
 ```
 
 ### TYPES
@@ -114,7 +118,7 @@ type EventReader interface {
 }
 ```
 
-Servers to write `Event`s in `Handle.Handle` to chain `Event`s 
+Servers to write `Event`s in `Handle.Handle` to chain `Event`s  
 **Do not forget to call `Done()` when finished writing**
 ```go
 type EventWriter interface {
@@ -176,7 +180,8 @@ Implementation of `error`
 ```go
 func (err *ErrCommandHandlerNotFound) Error() string
 ```
-Returns new `*ErrEvent` caused by `event` `*ErrEvent` implements `error` and `Event`
+Returns new `*ErrEvent` caused by `event`  
+`*ErrEvent` implements `error` and `Event`
 ```go
 func NewErrEvent(event Event, err error) *ErrEvent
 ```
@@ -214,7 +219,8 @@ Implementation of `error`
 ```go
 func (err *ErrIncorrectHandler) Error() string
 ```
-`error` type returned if `Error` equals `nil` `ErrNilEvent` implements `error` and `Event`
+`error` type returned if `Event` equals `nil`  
+`ErrNilEvent` implements `error` and `Event`
 ```go
 type ErrNilEvent string
 ```
