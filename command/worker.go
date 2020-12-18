@@ -25,8 +25,8 @@ func NewWorker(ctx context.Context, eventSink func(Event), commands Commands) Co
 }
 
 type worker struct {
-	ctx context.Context
-	mu  sync.RWMutex
+	ctx  context.Context
+	rwMu sync.RWMutex
 
 	started   bool
 	commands  Commands
@@ -35,8 +35,8 @@ type worker struct {
 }
 
 func (w *worker) Handle(event Event) error {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+	w.rwMu.RLock()
+	defer w.rwMu.RUnlock()
 
 	if !w.started {
 		return WorkerStopped
@@ -48,8 +48,8 @@ func (w *worker) Handle(event Event) error {
 }
 
 func (w *worker) IsRunning() bool {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+	w.rwMu.RLock()
+	defer w.rwMu.RUnlock()
 
 	return w.started
 }
@@ -59,12 +59,12 @@ func (w *worker) start() {
 		return
 	}
 
-	w.mu.Lock()
+	w.rwMu.Lock()
 
 	w.eventPipe = make(chan Event)
 	w.started = true
 
-	w.mu.Unlock()
+	w.rwMu.Unlock()
 
 	go func() {
 		var wg sync.WaitGroup
@@ -72,14 +72,14 @@ func (w *worker) start() {
 		for {
 			select {
 			case <-w.ctx.Done():
-				w.mu.Lock()
+				w.rwMu.Lock()
 
 				wg.Wait()
 
 				w.started = false
 				close(w.eventPipe)
 
-				w.mu.Unlock()
+				w.rwMu.Unlock()
 
 				return
 			case event := <-w.eventPipe:
@@ -87,7 +87,10 @@ func (w *worker) start() {
 				go func() {
 					defer wg.Done()
 
-					w.eventSink(w.commands.Handle(w.ctx, event))
+					ctx, cancel := context.WithCancel(w.ctx)
+
+					defer cancel()
+					w.eventSink(w.commands.Handle(ctx, event))
 				}()
 			}
 		}
