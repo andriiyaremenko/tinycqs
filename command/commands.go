@@ -46,7 +46,7 @@ func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) 
 	}
 
 	if !exists {
-		return Done
+		return Done(event)
 	}
 
 	h, ok := c.getHandle(event.EventType())
@@ -66,7 +66,7 @@ func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) 
 			return NewErrEvent(event, ctx.Err())
 		case ev := <-rw.Read():
 			if ev == nil {
-				return Done
+				return Done(event)
 			}
 
 			return ev
@@ -110,7 +110,6 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 		select {
 		case <-ctx.Done():
 			return NewErrEvent(initialEvent, ctx.Err())
-
 		case event := <-rw.Read():
 			if event == doneWriting {
 				wg.Done()
@@ -151,7 +150,7 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 			}
 		case r := <-resultCh:
 			if r.Err() == nil {
-				return Done
+				return Done(initialEvent)
 			}
 
 			return r

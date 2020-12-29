@@ -52,7 +52,7 @@ func testWorkerShouldStartAndHandleCommands(t *testing.T) {
 		command.CommandHandlerFunc("test_3", handlerFunc3),
 	)
 	eventSink := func(e command.Event) {
-		t.Log(e)
+		t.Log(e.EventType())
 	}
 
 	w := command.NewWorker(ctx, eventSink, c)
