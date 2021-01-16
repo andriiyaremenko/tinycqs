@@ -3,11 +3,11 @@ package tinycqs
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/andriiyaremenko/tinycqs/command"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -48,6 +48,8 @@ func TestCommand(t *testing.T) {
 		testCommandHandleChainEventsShouldUseGlobalErrHandler)
 	t.Run("Command should restrict only one global error handler",
 		testCommandYouCanUseOnlyOneUseGlobalErrHandler)
+	t.Run("Correlation IDs should be correctly resolved in Metadata",
+		testMetadata)
 }
 
 func testCanCreateCommand(t *testing.T) {
@@ -481,19 +483,80 @@ func testCommandYouCanUseOnlyOneUseGlobalErrHandler(t *testing.T) {
 	assert.EqualError(err, command.MoreThanOneCatchAllErrorHandler.Error(), "error should be returned")
 }
 
-type wasCalledCounter struct {
-	mu    sync.Mutex
-	count int
-}
+func testMetadata(t *testing.T) {
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
 
-func (cc *wasCalledCounter) increase() {
-	cc.mu.Lock()
-	cc.count++
-	cc.mu.Unlock()
-}
+	defer cancel()
 
-func (cc *wasCalledCounter) getCount() int {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
-	return cc.count
+	assert := assert.New(t)
+	id := uuid.New().String()
+	correlationID := uuid.New().String()
+	causationID := uuid.New().String()
+	handler1 := &command.CommandHandler{
+		EType: "test_1",
+		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
+			defer r.Done()
+
+			withMetadata := command.AsEventWithMetadata(e)
+			assert.NotNil(withMetadata, "metadata should be presented in first event")
+			assert.Equal(id, withMetadata.Metadata().ID(), "ID should equal ID in first event")
+			assert.Equal(correlationID, withMetadata.Metadata().CorrelationID(),
+				"correlation ID should equal correlationID in first event")
+			assert.Equal(causationID, withMetadata.Metadata().CausationID(),
+				"causation ID should equal causationID in first event")
+
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_3"})
+		}}
+	handler2 := &command.CommandHandler{
+		EType: "test_2",
+		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
+			defer r.Done()
+
+			withMetadata := command.AsEventWithMetadata(e)
+			assert.NotNil(withMetadata, "metadata should be presented in second event")
+			assert.NotEqual(id, withMetadata.Metadata().ID(), "ID should not equal ID in second event")
+			assert.Equal(correlationID, withMetadata.Metadata().CorrelationID(),
+				"correlation ID should equal correlationID in second event")
+			assert.Equal(id, withMetadata.Metadata().CausationID(),
+				"causation ID should equal id in second event")
+
+			r.Write(command.E{EType: "test_3"})
+		}}
+	handler3 := &command.CommandHandler{
+		EType: "test_3",
+		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
+			defer r.Done()
+
+			withMetadata := command.AsEventWithMetadata(e)
+			assert.NotNil(withMetadata, "metadata should be presented in third event")
+			assert.NotEqual(id, withMetadata.Metadata().ID(), "ID should not equal ID in third event")
+			assert.Equal(correlationID, withMetadata.Metadata().CorrelationID(),
+				"correlation ID should equal correlationID in third event")
+		}}
+
+	c, _ := command.NewCommandsWithConcurrencyLimit(
+		20,
+		handler1,
+		handler2,
+		handler3,
+	)
+	ev := c.Handle(ctx,
+		command.WithMetadata(command.E{EType: "test_1"},
+			command.M{EID: id, ECorrelationID: correlationID, ECausationID: causationID}))
+
+	assert.NoError(ev.Err(), "no error should be returned")
+
+	unwrapped := command.Unwrap(ev)
+	withMetadata := command.AsEventWithMetadata(unwrapped)
+	assert.NotNil(withMetadata, "metadata should be presented in unwrapped done event")
+
+	assert.Equal(id, withMetadata.Metadata().ID(), "ID should equal ID in unwrapped done event")
+	assert.Equal(correlationID, withMetadata.Metadata().CorrelationID(),
+		"correlation ID should equal correlationID in unwrapped done event")
+	assert.Equal(causationID, withMetadata.Metadata().CausationID(),
+		"causation ID should equal causationID in unwrapped done event")
 }

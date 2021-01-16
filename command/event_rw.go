@@ -3,6 +3,8 @@ package command
 import (
 	"context"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 func newEventRW(ctx context.Context, limit int) EventReader {
@@ -63,8 +65,8 @@ func (r *eventRW) done() {
 	r.write(doneWriting)
 }
 
-func (r *eventRW) GetWriter() EventWriter {
-	return &eventW{eventRW: r}
+func (r *eventRW) GetWriter(metadata Metadata) EventWriter {
+	return &eventW{eventRW: r, metadata: metadata}
 }
 
 type eventW struct {
@@ -72,13 +74,17 @@ type eventW struct {
 	once   sync.Once
 	mu     sync.Mutex
 
-	eventRW *eventRW
+	eventRW  *eventRW
+	metadata Metadata
 }
 
 func (r *eventW) Write(e Event) {
 	r.mu.Lock()
 
 	if !r.isDone {
+		id := uuid.New().String()
+		e = WithMetadata(e, r.metadata.New(id))
+
 		r.eventRW.write(e)
 	}
 

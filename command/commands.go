@@ -3,6 +3,8 @@ package command
 import (
 	"context"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 // Returns new `Commands` with Concurrency Limit equals to `limit` or `error`
@@ -38,6 +40,12 @@ type commands struct {
 }
 
 func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) Event {
+	withMetadata := AsEventWithMetadata(event)
+	if withMetadata == nil {
+		id := uuid.New().String()
+		withMetadata = WithMetadata(event, M{EID: id, ECorrelationID: id, ECausationID: id})
+	}
+
 	exists := false
 	for _, c := range only {
 		if exists = c == event.EventType(); exists {
@@ -58,7 +66,7 @@ func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) 
 
 	defer rw.Close()
 
-	h.Handle(ctx, rw.GetWriter(), event)
+	h.Handle(ctx, rw.GetWriter(withMetadata.Metadata()), withMetadata)
 
 	for {
 		select {
@@ -85,6 +93,14 @@ func (c *commands) Handle(ctx context.Context, event Event) Event {
 func (c *commands) sealed() {}
 
 func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventReader) Event {
+	withMetadata := AsEventWithMetadata(initialEvent)
+	if withMetadata == nil {
+		id := uuid.New().String()
+		withMetadata = WithMetadata(initialEvent, M{EID: id, ECorrelationID: id, ECausationID: id})
+	}
+
+	initialEvent = withMetadata
+
 	h, ok := c.getHandle(initialEvent.EventType())
 	if !ok {
 		return NewErrEvent(initialEvent, &ErrCommandHandlerNotFound{initialEvent.EventType()})
@@ -93,7 +109,7 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	h.Handle(ctx, rw.GetWriter(), initialEvent)
+	h.Handle(ctx, rw.GetWriter(withMetadata.Metadata()), initialEvent)
 
 	errAggregated := NewErrAggregatedEvent(initialEvent)
 	resultCh := make(chan Event)
@@ -141,12 +157,18 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 				}
 			}
 
+			withMetadata := AsEventWithMetadata(event)
+			if withMetadata == nil {
+				id := uuid.New().String()
+				withMetadata = WithMetadata(event, M{EID: id, ECorrelationID: id, ECausationID: id})
+			}
+
 			select {
 			case <-ctx.Done():
 				continue
 			default:
 				wg.Add(1)
-				h.Handle(ctx, rw.GetWriter(), event)
+				h.Handle(ctx, rw.GetWriter(withMetadata.Metadata()), withMetadata)
 			}
 		case r := <-resultCh:
 			if r.Err() == nil {

@@ -4,6 +4,19 @@ import (
 	"context"
 )
 
+// Metadata carries additional information not used in command execution
+type Metadata interface {
+	// Unique event ID
+	ID() string
+	// Root event ID that triggered execution of the program
+	CorrelationID() string
+	// ID of event that caused execution of current event
+	CausationID() string
+
+	// New metadata for next event in execution chain
+	New(id string) Metadata
+}
+
 // Event carries information needed to execute `Commands.Handle` and `Commands.HandleOnly`
 type Event interface {
 	// Type of event. Is used to select `Handler`
@@ -14,6 +27,13 @@ type Event interface {
 	Err() error
 }
 
+// Event with metadata
+type EventWithMetadata interface {
+	Event
+	// returns current event `Metadata`
+	Metadata() Metadata
+}
+
 // Serves to pass `Event`s to `Handler`s
 type EventReader interface {
 	// Returns `Event` channel
@@ -22,7 +42,7 @@ type EventReader interface {
 	Close()
 
 	// Returns `EventWriter` instance on which this `EventReader` is based
-	GetWriter() EventWriter
+	GetWriter(Metadata) EventWriter
 }
 
 // Servers to write `Event`s in `Handle.Handle` to chain `Event`s

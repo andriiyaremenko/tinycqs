@@ -6,7 +6,16 @@ import (
 	"sync"
 )
 
-var MoreThanOneCatchAllErrorHandler = fmt.Errorf(`you can use only one handler for "%s" event`, CatchAllErrorEventType)
+const CatchAllErrorEventType string = "ERROR#*"
+
+var MoreThanOneCatchAllErrorHandler = fmt.Errorf(`you can use only one handler for "%s" event`,
+	CatchAllErrorEventType)
+
+func ErrorEventType(eventType string) string { return fmt.Sprintf("ERROR#%s", eventType) }
+
+func IsError(event Event, eventType string) bool {
+	return event.EventType() == ErrorEventType(eventType)
+}
 
 // Returns new `*ErrEvent` caused by `event`
 // `*ErrEvent` implements `error` and `Event`
