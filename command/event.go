@@ -6,7 +6,7 @@ import (
 
 const doneWriting doneEv = doneEv("EVENT_WRITER_DONE_WRITING")
 
-// returns wrapped `Event` by calling `.Event()` method if `event` has it or `nil` otherwise
+// returns wrapped Event by calling .Event() method if event has it or nil otherwise.
 func Unwrap(event Event) Event {
 	withE, ok := event.(interface{ Event() Event })
 	if !ok {
@@ -16,13 +16,13 @@ func Unwrap(event Event) Event {
 	return withE.Event()
 }
 
-// returns Done event type for `eventType` event
+// returns Done event type for eventType event.
 func DoneEventType(eventType string) string { return fmt.Sprintf("DONE#%s", eventType) }
 
-// `Event` returned as a result of successful processing `Event` or chain of `Event`s
+// Event returned as a result of successful processing Event or chain of Events.
 func Done(event Event) Event { return &DoneEvent{E: event} }
 
-// returns `true` if `event` is `*DoneEvent` and `.EventType()` equals `DoneEventType(eventType)`
+// returns true if event is *DoneEvent and .EventType() equals DoneEventType(eventType).
 func IsDone(event Event, eventType string) bool {
 	done, ok := event.(*DoneEvent)
 	if !ok ||
@@ -47,7 +47,7 @@ func (done doneEv) Err() error {
 	return nil
 }
 
-// `DoneEvent` is returned if `Event`` was handled successfully
+// DoneEvent is returned if Event was handled successfully.
 type DoneEvent struct {
 	E Event
 }
@@ -68,7 +68,7 @@ func (done *DoneEvent) Event() Event {
 	return done.E
 }
 
-// `E` implements `Event`
+// E implements Event.
 type E struct {
 	EType    string
 	EPayload []byte
@@ -86,12 +86,12 @@ func (e E) Err() error {
 	return nil
 }
 
-// Adds `Metadata` to `event`
+// Adds Metadata to event.
 func WithMetadata(event Event, metadata Metadata) EventWithMetadata {
 	return &eventWithMetadata{event, metadata}
 }
 
-// Returns `EventWithMetadata` if `event` can be converted to it. `nil` otherwise
+// Returns EventWithMetadata if event can be converted to it. nil otherwise.
 func AsEventWithMetadata(event Event) EventWithMetadata {
 	withM, ok := event.(EventWithMetadata)
 	if ok {
@@ -130,7 +130,7 @@ func (e *eventWithMetadata) Event() Event {
 	return e.event
 }
 
-// `M` implements `Metadata`
+// M implements Metadata.
 type M struct {
 	EID            string
 	ECorrelationID string
