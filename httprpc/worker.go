@@ -1,15 +1,16 @@
 package httprpc
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/andriiyaremenko/tinycqs/command"
-	"github.com/google/uuid"
 )
 
 // Turns command.CommandsWorker into http.Handler.
 // Every command.Handler handles Request with corresponding Method.
-// Request.Props are passed to command.CommandsWorker.Handle as Event.Payload
+// Request.Props are passed to command.CommandsWorker.Handle as Event.Payload.
+// Supports only JSON RPC Notifications.
 func CommandsWorker(worker command.CommandsWorker) http.Handler {
 	return &commandsWorkerHandler{worker}
 }
@@ -24,39 +25,48 @@ func (h *commandsWorkerHandler) ServeHTTP(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	method, payload, err := getRequest(req)
+	metadata := addMetadata(w, req)
+
+	w.Header().Add("Content-Type", "application/json")
+
+	var errResponse *ErrorResponse
+	reqModel, payload, errCode, err := getRequest(req)
+
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		errResponse := new(ErrorResponse)
+		errResponse.Version = ProtocolVersion
+		errResponse.Error = Error{Code: errCode, Message: err.Error()}
+
+		writeErrorResponse(w, errResponse)
+
 		return
 	}
 
-	var ev command.Event = command.E{EType: method, EPayload: payload}
-	metadata, idKey, causationIDKey, correlationIDKey, hasMetadata := getMetadata(req)
+	if reqModel.ID != nil {
+		writeErrorResponse(w,
+			reqModel.NewErrorResponse(InternalError, "CommandsWorker supports only JSON-RPC Notifications", nil))
 
-	if hasMetadata {
-		ev = command.WithMetadata(ev, metadata)
-		metadata = metadata.New(uuid.New().String())
+		return
 	}
 
-	if !hasMetadata {
-		idKey = "RequestID"
-		causationIDKey = "CausationID"
-		correlationIDKey = "CorrelationID"
-		id := uuid.New().String()
-		metadata = command.M{EID: id, ECausationID: id, ECorrelationID: id}
-		ev = command.WithMetadata(ev, metadata)
+	var ev command.Event = command.E{EType: reqModel.Method, EPayload: payload}
+
+	err = h.worker.Handle(command.WithMetadata(ev, metadata))
+	methodNotSupported := new(command.ErrCommandHandlerNotFound)
+
+	if errors.As(err, &methodNotSupported) {
+		errResponse = reqModel.NewErrorResponse(MethodNotFound, err.Error(), nil)
 	}
 
-	w.Header().Add(idKey, metadata.ID())
-	w.Header().Add(causationIDKey, metadata.CausationID())
-	w.Header().Add(correlationIDKey, metadata.CorrelationID())
+	if errResponse == nil && err != nil {
+		errResponse = reqModel.NewErrorResponse(InternalError, err.Error(), nil)
+	}
 
-	if err := h.worker.Handle(ev); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if errResponse != nil {
+		writeErrorResponse(w, errResponse)
+
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-
-	return
 }

@@ -8,6 +8,7 @@ import (
 	"regexp"
 
 	"github.com/andriiyaremenko/tinycqs/command"
+	"github.com/google/uuid"
 )
 
 var (
@@ -21,27 +22,31 @@ type keyValue struct {
 	value string
 }
 
-func getRequest(req *http.Request) (string, []byte, error) {
+func getRequest(req *http.Request) (*Request, []byte, int, error) {
 	b, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to read request body: %s", err)
+		return nil, nil, ParseError, fmt.Errorf("failed to read request body: %s", err)
 	}
 
 	reqModel := new(Request)
 	if err := json.Unmarshal(b, reqModel); err != nil {
-		return "", nil, fmt.Errorf("invalid request format: %s", err)
+		return nil, nil, InvalidRequest, fmt.Errorf("invalid request format: %s", err)
 	}
 
 	if reqModel.Method == "" {
-		return "", nil, fmt.Errorf("invalid request format: %s", string(b))
+		return nil, nil, InvalidRequest, fmt.Errorf("invalid request format: %s", string(b))
+	}
+
+	if reqModel.Version != ProtocolVersion {
+		return nil, nil, InvalidRequest, fmt.Errorf("invalid request format: %s", string(b))
 	}
 
 	payload, err := json.Marshal(reqModel.Params)
 	if err != nil {
-		return "", nil, fmt.Errorf("invalid request format: %s", err)
+		return nil, nil, InvalidRequest, fmt.Errorf("invalid request format: %s", err)
 	}
 
-	return reqModel.Method, payload, err
+	return reqModel, payload, 0, err
 }
 
 func getMetadata(req *http.Request) (command.Metadata, string, string, string, bool) {
@@ -72,4 +77,37 @@ func getMetadata(req *http.Request) (command.Metadata, string, string, string, b
 		ECorrelationID: correlationID.value}
 
 	return metadata, id.key, causationID.key, correlationID.key, true
+}
+
+func writeErrorResponse(w http.ResponseWriter, errResponse *ErrorResponse) {
+	b, err := json.Marshal(errResponse)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write(b)
+}
+
+func addMetadata(w http.ResponseWriter, req *http.Request) command.Metadata {
+	metadata, idKey, causationIDKey, correlationIDKey, hasMetadata := getMetadata(req)
+	if hasMetadata {
+		metadata = metadata.New(uuid.New().String())
+	}
+
+	if !hasMetadata {
+		idKey = "RequestID"
+		causationIDKey = "CausationID"
+		correlationIDKey = "CorrelationID"
+		id := uuid.New().String()
+		metadata = command.M{EID: id, ECausationID: id, ECorrelationID: id}
+	}
+
+	w.Header().Add(idKey, metadata.ID())
+	w.Header().Add(causationIDKey, metadata.CausationID())
+	w.Header().Add(correlationIDKey, metadata.CorrelationID())
+
+	return metadata
 }

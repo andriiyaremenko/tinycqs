@@ -1,16 +1,17 @@
 package httprpc
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 
-	"github.com/andriiyaremenko/tinycqs/command"
 	"github.com/andriiyaremenko/tinycqs/query"
-	"github.com/google/uuid"
 )
 
 // Turns query.Queries into http.Handler.
 // Every query.Handler handles Request with corresponding Method.
-// Request.Props are passed to query.Queries.Handle as Event.Payload
+// Request.Props are passed to query.Queries.Handle as Event.Payload.
+// Does not supports only JSON RPC Notifications.
 func Queries(queries query.Queries) http.Handler {
 	return &queriesHandler{queries}
 }
@@ -25,35 +26,53 @@ func (h *queriesHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	method, payload, err := getRequest(req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	metadata, idKey, causationIDKey, correlationIDKey, hasMetadata := getMetadata(req)
-	if hasMetadata {
-		metadata = metadata.New(uuid.New().String())
-	}
-
-	if !hasMetadata {
-		idKey = "RequestID"
-		causationIDKey = "CausationID"
-		correlationIDKey = "CorrelationID"
-		id := uuid.New().String()
-		metadata = command.M{EID: id, ECausationID: id, ECorrelationID: id}
-	}
-
-	w.Header().Add(idKey, metadata.ID())
-	w.Header().Add(causationIDKey, metadata.CausationID())
-	w.Header().Add(correlationIDKey, metadata.CorrelationID())
-
-	resp, err := h.queries.Handle(req.Context(), method, payload)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
+	addMetadata(w, req)
 	w.Header().Add("Content-Type", "application/json")
-	w.Write(resp)
+
+	var errResponse *ErrorResponse
+	reqModel, payload, errCode, err := getRequest(req)
+
+	if err != nil {
+		errResponse = new(ErrorResponse)
+		errResponse.Version = ProtocolVersion
+		errResponse.Error = Error{Code: errCode, Message: err.Error()}
+
+		writeErrorResponse(w, errResponse)
+
+		return
+	}
+
+	if reqModel.ID == nil {
+		writeErrorResponse(w,
+			reqModel.NewErrorResponse(InternalError, "Queries does not support JSON-RPC Notifications", nil))
+
+		return
+	}
+
+	result := make(map[string]interface{})
+	err = h.queries.HandleJSONEncoded(req.Context(), reqModel.Method, &result, payload)
+	methodNotSupported := new(query.ErrQueryHandlerNotFound)
+
+	if errors.As(err, &methodNotSupported) {
+		errResponse = reqModel.NewErrorResponse(MethodNotFound, err.Error(), nil)
+	}
+
+	if errResponse == nil && err != nil {
+		errResponse = reqModel.NewErrorResponse(InternalApplicationError, err.Error(), nil)
+	}
+
+	if errResponse != nil {
+		writeErrorResponse(w, errResponse)
+
+		return
+	}
+
+	b, err := json.Marshal(reqModel.NewResponse(result))
+	if err != nil {
+		writeErrorResponse(w, reqModel.NewErrorResponse(InternalApplicationError, err.Error(), nil))
+
+		return
+	}
+
+	w.Write(b)
 }

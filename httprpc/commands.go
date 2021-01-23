@@ -1,15 +1,16 @@
 package httprpc
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/andriiyaremenko/tinycqs/command"
-	"github.com/google/uuid"
 )
 
 // Turns command.Commands into http.Handler.
 // Every command.Handler handles Request with corresponding Method.
-// Request.Props are passed to command.Commands.Handle as Event.Payload
+// Request.Props are passed to command.Commands.Handle as Event.Payload.
 func Commands(commands command.Commands) http.Handler {
 	return &commandsHandler{commands}
 }
@@ -24,44 +25,55 @@ func (h *commandsHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	method, payload, err := getRequest(req)
+	metadata := addMetadata(w, req)
+	w.Header().Add("Content-Type", "application/json")
+
+	var errResponse *ErrorResponse
+	reqModel, payload, errCode, err := getRequest(req)
+
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		errResponse := new(ErrorResponse)
+		errResponse.Version = ProtocolVersion
+		errResponse.Error = Error{Code: errCode, Message: err.Error()}
+
+		writeErrorResponse(w, errResponse)
+
 		return
 	}
 
-	var ev command.Event = command.E{EType: method, EPayload: payload}
-	metadata, idKey, causationIDKey, correlationIDKey, hasMetadata := getMetadata(req)
+	var ev command.Event = command.E{EType: reqModel.Method, EPayload: payload}
+	ev = h.commands.Handle(req.Context(), command.WithMetadata(ev, metadata))
 
-	if hasMetadata {
-		ev = command.WithMetadata(ev, metadata)
-		metadata = metadata.New(uuid.New().String())
+	err = ev.Err()
+	methodNotSupported := new(command.ErrCommandHandlerNotFound)
+
+	if errors.As(err, &methodNotSupported) {
+		errResponse = reqModel.NewErrorResponse(MethodNotFound, err.Error(), nil)
 	}
 
-	if !hasMetadata {
-		idKey = "RequestID"
-		causationIDKey = "CausationID"
-		correlationIDKey = "CorrelationID"
+	if errResponse == nil && err != nil {
+		errResponse = reqModel.NewErrorResponse(InternalApplicationError, err.Error(), nil)
 	}
 
-	ev = h.commands.Handle(req.Context(), ev)
-	if withMetadata := command.AsEventWithMetadata(ev); !hasMetadata && withMetadata != nil {
-		metadata = withMetadata.Metadata()
-	}
+	if errResponse != nil {
+		writeErrorResponse(w, errResponse)
 
-	w.Header().Add(idKey, metadata.ID())
-	w.Header().Add(causationIDKey, metadata.CausationID())
-	w.Header().Add(correlationIDKey, metadata.CorrelationID())
-
-	if err := ev.Err(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if !command.IsDone(ev, method) {
-		w.Header().Add("Content-Type", "application/json")
-		w.Write(ev.Payload())
+	if reqModel.ID != nil {
+		result := make(map[string]interface{})
+		result["message"] = ev.EventType()
+		result["params"] = reqModel.Params
 
+		b, err := json.Marshal(reqModel.NewResponse(result))
+		if err != nil {
+			writeErrorResponse(w, reqModel.NewErrorResponse(InternalApplicationError, err.Error(), nil))
+
+			return
+		}
+
+		w.Write(b)
 		return
 	}
 
