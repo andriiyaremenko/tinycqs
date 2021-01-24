@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"sync"
 
 	"github.com/andriiyaremenko/tinycqs/command"
 	"github.com/google/uuid"
@@ -22,6 +23,24 @@ var (
 type keyValue struct {
 	key   string
 	value string
+}
+
+type cSlice struct {
+	mu    sync.Mutex
+	items []interface{}
+}
+
+func (cs *cSlice) append(item interface{}) {
+	cs.mu.Lock()
+	cs.items = append(cs.items, item)
+	cs.mu.Unlock()
+}
+
+func (cs *cSlice) value() []interface{} {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	return cs.items
 }
 
 func getRequest(b []byte) ([]Request, bool, int, error) {

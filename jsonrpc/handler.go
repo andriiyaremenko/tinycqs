@@ -42,7 +42,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	ctx := req.Context()
-	responses := make([]interface{}, 0, 1)
+	responses := new(cSlice)
 	var wg sync.WaitGroup
 
 	for _, reqModel := range reqModels {
@@ -50,39 +50,47 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		go func(reqModel Request) {
 			defer wg.Done()
 
-			if reqModel.ID != nil {
-				successResp, errResp := h.handleQueries(ctx, reqModel, metadata)
-				if errResp != nil && errResp.Error.Code == MethodNotFound {
-					successResp, errResp = h.handleCommand(ctx, reqModel, metadata)
-				}
+			payload, err := json.Marshal(reqModel.Params)
+			if err != nil {
+				writeErrorResponse(w, reqModel.NewErrorResponse(InvalidRequest, fmt.Sprintf("request format: %s", err), nil))
 
-				if errResp != nil {
-					responses = append(responses, errResp)
-					return
-				}
-
-				responses = append(responses, successResp)
 				return
 			}
 
-			errResp := h.workerHandleCommand(reqModel, metadata)
+			if reqModel.ID != nil {
+				successResp, errResp := h.handleQueries(ctx, reqModel, metadata, payload)
+				if errResp != nil && errResp.Error.Code == MethodNotFound {
+					successResp, errResp = h.handleCommand(ctx, reqModel, metadata, payload)
+				}
+
+				if errResp != nil {
+					responses.append(errResp)
+					return
+				}
+
+				responses.append(successResp)
+				return
+			}
+
+			errResp := h.workerHandleCommand(reqModel, metadata, payload)
 			if errResp != nil && errResp.Error.Code == MethodNotFound {
-				_, errResp = h.handleCommand(ctx, reqModel, metadata)
+				_, errResp = h.handleCommand(ctx, reqModel, metadata, payload)
 			}
 
 			if errResp != nil {
-				responses = append(responses, errResp)
+				responses.append(errResp)
 			}
 		}(reqModel)
 	}
 
 	wg.Wait()
+	items := responses.value()
 
 	switch {
-	case len(responses) == 0:
+	case len(items) == 0:
 		w.WriteHeader(http.StatusNoContent)
 	case isBatch:
-		b, err := json.Marshal(responses)
+		b, err := json.Marshal(items)
 		if err == nil {
 			w.Write(b)
 
@@ -94,7 +102,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		errResponse.Error = Error{Code: InternalApplicationError, Message: err.Error()}
 		writeErrorResponse(w, errResponse)
 	default:
-		resp := responses[0]
+		resp := items[0]
 		errResponse, ok := resp.(*ErrorResponse)
 
 		if ok {
@@ -115,15 +123,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *Handler) handleCommand(ctx context.Context, reqModel Request, metadata command.Metadata) (*SuccessResponse, *ErrorResponse) {
+func (h *Handler) handleCommand(ctx context.Context, reqModel Request, metadata command.Metadata, payload []byte) (*SuccessResponse, *ErrorResponse) {
 	if h.Commands == nil {
 		return nil, reqModel.NewErrorResponse(MethodNotFound,
 			fmt.Sprintf("handler not found for command %s", reqModel.Method), nil)
-	}
-
-	payload, err := json.Marshal(reqModel.Params)
-	if err != nil {
-		return nil, reqModel.NewErrorResponse(InvalidRequest, fmt.Sprintf("request format: %s", err), nil)
 	}
 
 	var ev command.Event = command.E{EType: reqModel.Method, EPayload: payload}
@@ -135,7 +138,7 @@ func (h *Handler) handleCommand(ctx context.Context, reqModel Request, metadata 
 	}
 
 	var errResponse *ErrorResponse
-	err = ev.Err()
+	err := ev.Err()
 	methodNotSupported := new(command.ErrCommandHandlerNotFound)
 
 	if errors.As(err, &methodNotSupported) {
@@ -161,7 +164,7 @@ func (h *Handler) handleCommand(ctx context.Context, reqModel Request, metadata 
 	return nil, nil
 }
 
-func (h *Handler) handleQueries(ctx context.Context, reqModel Request, metadata command.Metadata) (*SuccessResponse, *ErrorResponse) {
+func (h *Handler) handleQueries(ctx context.Context, reqModel Request, metadata command.Metadata, payload []byte) (*SuccessResponse, *ErrorResponse) {
 	if h.Queries == nil {
 		return nil, reqModel.NewErrorResponse(MethodNotFound,
 			fmt.Sprintf("handler not found for query %s", reqModel.Method), nil)
@@ -171,14 +174,9 @@ func (h *Handler) handleQueries(ctx context.Context, reqModel Request, metadata 
 		return nil, reqModel.NewErrorResponse(InternalError, "Queries does not support JSON-RPC Notifications", nil)
 	}
 
-	payload, err := json.Marshal(reqModel.Params)
-	if err != nil {
-		return nil, reqModel.NewErrorResponse(InvalidRequest, fmt.Sprintf("request format: %s", err), nil)
-	}
-
 	var errResponse *ErrorResponse
 	result := make(map[string]interface{})
-	err = h.Queries.HandleJSONEncoded(ctx, reqModel.Method, &result, payload)
+	err := h.Queries.HandleJSONEncoded(ctx, reqModel.Method, &result, payload)
 	methodNotSupported := new(query.ErrQueryHandlerNotFound)
 
 	if errors.As(err, &methodNotSupported) {
@@ -196,7 +194,7 @@ func (h *Handler) handleQueries(ctx context.Context, reqModel Request, metadata 
 	return reqModel.NewResponse(result), nil
 }
 
-func (h *Handler) workerHandleCommand(reqModel Request, metadata command.Metadata) *ErrorResponse {
+func (h *Handler) workerHandleCommand(reqModel Request, metadata command.Metadata, payload []byte) *ErrorResponse {
 	if h.Worker == nil {
 		return reqModel.NewErrorResponse(MethodNotFound,
 			fmt.Sprintf("handler not found for command %s", reqModel.Method), nil)
@@ -206,15 +204,10 @@ func (h *Handler) workerHandleCommand(reqModel Request, metadata command.Metadat
 		return reqModel.NewErrorResponse(InternalError, "CommandsWorker supports only JSON-RPC Notifications", nil)
 	}
 
-	payload, err := json.Marshal(reqModel.Params)
-	if err != nil {
-		return reqModel.NewErrorResponse(InvalidRequest, fmt.Sprintf("request format: %s", err), nil)
-	}
-
 	var ev command.Event = command.E{EType: reqModel.Method, EPayload: payload}
 
 	var errResponse *ErrorResponse
-	err = h.Worker.Handle(command.WithMetadata(ev, metadata))
+	err := h.Worker.Handle(command.WithMetadata(ev, metadata))
 	methodNotSupported := new(command.ErrCommandHandlerNotFound)
 
 	if errors.As(err, &methodNotSupported) {
