@@ -1,4 +1,4 @@
-package httprpc
+package jsonrpc
 
 import _ "encoding/json"
 

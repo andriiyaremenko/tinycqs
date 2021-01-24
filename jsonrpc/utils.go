@@ -1,6 +1,7 @@
-package httprpc
+package jsonrpc
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -23,23 +24,50 @@ type keyValue struct {
 	value string
 }
 
-func getRequest(req *http.Request) (*Request, []byte, int, error) {
+func getRequest(b []byte) ([]Request, bool, int, error) {
+	var reqModel Request
+	if err := json.Unmarshal(b, &reqModel); err != nil {
+		return nil, false, InvalidRequest, fmt.Errorf("invalid request format: %s", err)
+	}
+
+	if !isValid(reqModel) {
+		return nil, false, InvalidRequest, fmt.Errorf("invalid request format: %s", string(b))
+	}
+
+	return []Request{reqModel}, false, 0, nil
+}
+
+func getRequests(req *http.Request) ([]Request, bool, int, error) {
 	b, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		return nil, nil, ParseError, fmt.Errorf("failed to read request body: %s", err)
+		return nil, false, ParseError, fmt.Errorf("failed to read request body: %s", err)
 	}
 
-	reqModel := new(Request)
-	if err := json.Unmarshal(b, reqModel); err != nil {
-		return nil, nil, InvalidRequest, fmt.Errorf("invalid request format: %s", err)
+	if !bytes.HasPrefix(b, []byte("[")) {
+		return getRequest(b)
 	}
 
+	reqModels := make([]Request, 0, 1)
+	if err := json.Unmarshal(b, &reqModels); err != nil {
+		return nil, false, InvalidRequest, fmt.Errorf("invalid request format: %s", err)
+	}
+
+	for _, reqModel := range reqModels {
+		if !isValid(reqModel) {
+			return nil, false, InvalidRequest, fmt.Errorf("invalid request format: %s", string(b))
+		}
+	}
+
+	return reqModels, true, 0, nil
+}
+
+func isValid(reqModel Request) bool {
 	if reqModel.Method == "" {
-		return nil, nil, InvalidRequest, fmt.Errorf("invalid request format: %s", string(b))
+		return false
 	}
 
 	if reqModel.Version != ProtocolVersion {
-		return nil, nil, InvalidRequest, fmt.Errorf("invalid request format: %s", string(b))
+		return false
 	}
 
 	isNil := reqModel.ID == nil
@@ -51,15 +79,10 @@ func getRequest(req *http.Request) (*Request, []byte, int, error) {
 	}
 
 	if !isString && !isInt && !isNil {
-		return nil, nil, InvalidRequest, fmt.Errorf("invalid request format: %s", string(b))
+		return false
 	}
 
-	payload, err := json.Marshal(reqModel.Params)
-	if err != nil {
-		return nil, nil, InvalidRequest, fmt.Errorf("invalid request format: %s", err)
-	}
-
-	return reqModel, payload, 0, err
+	return true
 }
 
 func getMetadata(req *http.Request) (command.Metadata, string, string, string, bool) {
