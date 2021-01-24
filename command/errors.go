@@ -8,8 +8,11 @@ import (
 
 const CatchAllErrorEventType string = "ERROR#*"
 
-var MoreThanOneCatchAllErrorHandler = fmt.Errorf(`you can use only one handler for "%s" event`,
-	CatchAllErrorEventType)
+var (
+	LimitLessThanOne                = fmt.Errorf("concurrency limit should equal or more than 1")
+	MoreThanOneCatchAllErrorHandler = fmt.Errorf(`you can use only one handler for "%s" event`,
+		CatchAllErrorEventType)
+)
 
 func ErrorEventType(eventType string) string { return fmt.Sprintf("ERROR#%s", eventType) }
 

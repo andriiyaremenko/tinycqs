@@ -42,7 +42,12 @@ func (h *commandsHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var ev command.Event = command.E{EType: reqModel.Method, EPayload: payload}
-	ev = h.commands.Handle(req.Context(), command.WithMetadata(ev, metadata))
+	switch reqModel.ID {
+	case nil:
+		ev = h.commands.Handle(req.Context(), command.WithMetadata(ev, metadata))
+	default:
+		ev = h.commands.HandleOnly(req.Context(), command.WithMetadata(ev, metadata), reqModel.Method)
+	}
 
 	err = ev.Err()
 	methodNotSupported := new(command.ErrCommandHandlerNotFound)

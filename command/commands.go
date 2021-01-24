@@ -25,13 +25,17 @@ func NewCommandsWithConcurrencyLimit(limit int, handlers ...Handler) (Commands, 
 		return nil, MoreThanOneCatchAllErrorHandler
 	}
 
+	if limit < 1 {
+		return nil, LimitLessThanOne
+	}
+
 	return &commands{handlers: handlers, cLimit: limit}, nil
 }
 
 // Returns new Commands with Concurrency Limit equals to 0 or error.
 // Concurrency Limit is amount of Events that can be processed concurrently.
 func NewCommands(handlers ...Handler) (Commands, error) {
-	return NewCommandsWithConcurrencyLimit(0, handlers...)
+	return NewCommandsWithConcurrencyLimit(1, handlers...)
 }
 
 type commands struct {
@@ -73,7 +77,7 @@ func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) 
 		case <-ctx.Done():
 			return NewErrEvent(event, ctx.Err())
 		case ev := <-rw.Read():
-			if ev == nil {
+			if event == doneWriting {
 				return Done(event)
 			}
 

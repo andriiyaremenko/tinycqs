@@ -28,6 +28,8 @@ func TestCommand(t *testing.T) {
 		testCommandShouldErrIfNoHandlersMatch)
 	t.Run("Command should be able to handle commands in only list",
 		testCommandCanHandleOnlyListOfCommands)
+	t.Run("Command HandleOnly should return Event if not done",
+		testCommandHandleOnlyNotDone)
 	t.Run("Command should be able to ignore commands absent in only list",
 		testCommandHandleOnlyIgnoresCommandsAbsentInList)
 	t.Run("Command should error if no handlers match command and command is in list",
@@ -85,7 +87,8 @@ func testCommandShouldErrIfNoHandlersMatch(t *testing.T) {
 	err := c.Handle(ctx, command.E{EType: "test_2"})
 	assert.EqualError(err.Err(), "failed to process event test_2: handler not found for command test_2", "error should be returned")
 	assert.IsType(&command.ErrEvent{}, err, "error should be of type *command.ErrEvent")
-	assert.IsType(&command.ErrCommandHandlerNotFound{}, (err.(*command.ErrEvent)).Unwrap(), "underlying error should be of type *command.ErrCommandHandlerNotFound")
+	assert.IsType(&command.ErrCommandHandlerNotFound{}, (err.(*command.ErrEvent)).Unwrap(),
+		"underlying error should be of type *command.ErrCommandHandlerNotFound")
 }
 
 func testCommandCanHandleOnlyListOfCommands(t *testing.T) {
@@ -103,6 +106,23 @@ func testCommandCanHandleOnlyListOfCommands(t *testing.T) {
 	)
 
 	assert.NoError(c.HandleOnly(ctx, command.E{EType: "test_1"}, "test_1").Err(), "no error should be returned")
+}
+
+func testCommandHandleOnlyNotDone(t *testing.T) {
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	assert := assert.New(t)
+	handler := func(ctx context.Context, _ []byte) error {
+		return errors.New("test")
+	}
+	c, _ := command.NewCommands(
+		command.CommandHandlerFunc("test_1", handler),
+	)
+
+	assert.Error(c.HandleOnly(ctx, command.E{EType: "test_1"}, "test_1").Err(), "error should be returned")
 }
 
 func testCommandHandleOnlyIgnoresCommandsAbsentInList(t *testing.T) {
