@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"regexp"
 
@@ -38,6 +39,18 @@ func getRequest(req *http.Request) (*Request, []byte, int, error) {
 	}
 
 	if reqModel.Version != ProtocolVersion {
+		return nil, nil, InvalidRequest, fmt.Errorf("invalid request format: %s", string(b))
+	}
+
+	isNil := reqModel.ID == nil
+	_, isString := reqModel.ID.(string)
+	_, isInt := reqModel.ID.(int)
+
+	if fl, ok := reqModel.ID.(float64); ok {
+		isInt = math.Mod(fl, 1) == 0
+	}
+
+	if !isString && !isInt && !isNil {
 		return nil, nil, InvalidRequest, fmt.Errorf("invalid request format: %s", string(b))
 	}
 
