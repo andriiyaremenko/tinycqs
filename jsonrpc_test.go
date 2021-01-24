@@ -448,7 +448,7 @@ func testHandlerShouldHandleBatchRequests(t *testing.T) {
 		assert.FailNowf("failed to read response", "%s: %s", err.Error(), string(body))
 	}
 
-	assert.Equal("success", response[0].Result["result"], `response.Result should contain "{"result": "sucess"}"`)
+	assert.Equal("success", response[0].Result["result"], `response.Result should contain "{"result": "success"}"`)
 	assert.EqualValues(1, response[0].ID, "json rpc request id should equal 1")
 	assert.Equal("2.0", response[0].Version, `json rpc request version should equal "2.0"`)
 }
