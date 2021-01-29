@@ -81,6 +81,7 @@ func testShouldReturn404(assert *assert.Assertions, handler http.Handler) {
 
 	assert.Equal(http.StatusNotFound, resp.StatusCode, "should return 404")
 	assert.NoError(err, "no error should be returned")
+	resp.Body.Close()
 }
 
 func testQueriesShouldReturn404(t *testing.T) {
@@ -145,6 +146,7 @@ func testShouldReturn400InvalidFormat(assert *assert.Assertions, handler http.Ha
 		assert.FailNow(err.Error())
 	}
 
+	resp.Body.Close()
 	assert.Equal(http.StatusBadRequest, resp.StatusCode, "should return 400")
 	assert.NoError(err, "no error should be returned")
 }
@@ -226,6 +228,8 @@ func testShouldReturn400ExecutionError(assert *assert.Assertions, handler http.H
 
 		assert.EqualValues(1, response.ID, "json rpc request id should equal 1")
 		assert.Equal("2.0", response.Version, `json rpc request version should equal "2.0"`)
+	} else {
+		resp.Body.Close()
 	}
 
 	assert.Equalf(code, resp.StatusCode, "should return %d", code)
@@ -333,6 +337,8 @@ func testShouldReturn200(assert *assert.Assertions, handler http.Handler, body s
 		assert.Equal("success", response.Result["result"], `response.Result should contain "{"result": "sucess"}"`)
 		assert.EqualValues(1, response.ID, "json rpc request id should equal 1")
 		assert.Equal("2.0", response.Version, `json rpc request version should equal "2.0"`)
+	} else {
+		resp.Body.Close()
 	}
 }
 

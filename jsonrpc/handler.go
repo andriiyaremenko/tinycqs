@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 
 	"github.com/andriiyaremenko/tinycqs/command"
 	"github.com/andriiyaremenko/tinycqs/query"
@@ -42,55 +41,46 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	ctx := req.Context()
-	responses := new(cSlice)
-	var wg sync.WaitGroup
+	responses := make([]interface{}, 0, 1)
 
 	for _, reqModel := range reqModels {
-		wg.Add(1)
-		go func(reqModel Request) {
-			defer wg.Done()
+		payload, err := json.Marshal(reqModel.Params)
+		if err != nil {
+			writeErrorResponse(w, reqModel.NewErrorResponse(InvalidRequest, fmt.Sprintf("request format: %s", err), nil))
 
-			payload, err := json.Marshal(reqModel.Params)
-			if err != nil {
-				writeErrorResponse(w, reqModel.NewErrorResponse(InvalidRequest, fmt.Sprintf("request format: %s", err), nil))
+			return
+		}
 
-				return
-			}
-
-			if reqModel.ID != nil {
-				successResp, errResp := h.handleQueries(ctx, reqModel, metadata, payload)
-				if errResp != nil && errResp.Error.Code == MethodNotFound {
-					successResp, errResp = h.handleCommand(ctx, reqModel, metadata, payload)
-				}
-
-				if errResp != nil {
-					responses.append(errResp)
-					return
-				}
-
-				responses.append(successResp)
-				return
-			}
-
-			errResp := h.workerHandleCommand(reqModel, metadata, payload)
+		if reqModel.ID != nil {
+			successResp, errResp := h.handleQueries(ctx, reqModel, metadata, payload)
 			if errResp != nil && errResp.Error.Code == MethodNotFound {
-				_, errResp = h.handleCommand(ctx, reqModel, metadata, payload)
+				successResp, errResp = h.handleCommand(ctx, reqModel, metadata, payload)
 			}
 
 			if errResp != nil {
-				responses.append(errResp)
+				responses = append(responses, errResp)
+				continue
 			}
-		}(reqModel)
+
+			responses = append(responses, successResp)
+			continue
+		}
+
+		_, errResp := h.handleCommand(ctx, reqModel, metadata, payload)
+		if errResp != nil && errResp.Error.Code == MethodNotFound {
+			errResp = h.workerHandleCommand(reqModel, metadata, payload)
+		}
+
+		if errResp != nil {
+			responses = append(responses, errResp)
+		}
 	}
 
-	wg.Wait()
-	items := responses.value()
-
 	switch {
-	case len(items) == 0:
+	case len(responses) == 0:
 		w.WriteHeader(http.StatusNoContent)
 	case isBatch:
-		b, err := json.Marshal(items)
+		b, err := json.Marshal(responses)
 		if err == nil {
 			w.Write(b)
 
@@ -102,7 +92,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		errResponse.Error = Error{Code: InternalApplicationError, Message: err.Error()}
 		writeErrorResponse(w, errResponse)
 	default:
-		resp := items[0]
+		resp := responses[0]
 		errResponse, ok := resp.(*ErrorResponse)
 
 		if ok {
@@ -205,16 +195,9 @@ func (h *Handler) workerHandleCommand(reqModel Request, metadata command.Metadat
 	}
 
 	var ev command.Event = command.E{EType: reqModel.Method, EPayload: payload}
-
 	var errResponse *ErrorResponse
-	err := h.Worker.Handle(command.WithMetadata(ev, metadata))
-	methodNotSupported := new(command.ErrCommandHandlerNotFound)
 
-	if errors.As(err, &methodNotSupported) {
-		errResponse = reqModel.NewErrorResponse(MethodNotFound, err.Error(), nil)
-	}
-
-	if errResponse == nil && err != nil {
+	if err := h.Worker.Handle(command.WithMetadata(ev, metadata)); err != nil {
 		errResponse = reqModel.NewErrorResponse(InternalError, err.Error(), nil)
 	}
 
