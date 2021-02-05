@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/google/uuid"
@@ -92,6 +93,15 @@ func (c *commands) Handle(ctx context.Context, event Event) Event {
 	defer rw.Close()
 
 	return c.handleNext(ctx, event, rw)
+}
+
+func (c *commands) MarshalJSON() ([]byte, error) {
+	events := make([]string, 0, 1)
+	for _, h := range c.handlers {
+		events = append(events, h.EventType())
+	}
+
+	return json.Marshal(events)
 }
 
 func (c *commands) sealed() {}

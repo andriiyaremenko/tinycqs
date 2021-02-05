@@ -58,6 +58,7 @@ func TestWorker(t *testing.T) {
 
 func TestHandler(t *testing.T) {
 	t.Run("Should handle batch requests", testHandlerShouldHandleBatchRequests)
+	t.Run("Should be able to marshal handler to JSON", testShouldMarshalHandlerToJSON)
 }
 
 func testShouldReturn404(assert *assert.Assertions, handler http.Handler) {
@@ -457,4 +458,55 @@ func testHandlerShouldHandleBatchRequests(t *testing.T) {
 	assert.Equal("success", response[0].Result["result"], `response.Result should contain "{"result": "success"}"`)
 	assert.EqualValues(1, response[0].ID, "json rpc request id should equal 1")
 	assert.Equal("2.0", response[0].Version, `json rpc request version should equal "2.0"`)
+}
+
+func testShouldMarshalHandlerToJSON(t *testing.T) {
+	assert := assert.New(t)
+	cFn := func(ctx context.Context, _ []byte) error {
+		return nil
+	}
+	c, err := command.NewCommands(command.CommandHandlerFunc("test_commands", cFn))
+
+	if err != nil {
+		assert.FailNow(err.Error())
+	}
+
+	c1, err := command.NewCommands(command.CommandHandlerFunc("test_worker", cFn))
+
+	if err != nil {
+		assert.FailNow(err.Error())
+	}
+
+	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c1)
+
+	fn := func(ctx context.Context, _ []byte) ([]byte, error) {
+		return []byte(`{"result": "success"}`), nil
+	}
+
+	q, err := query.NewQueries(query.QueryHandlerFunc("test_queries", fn))
+	if err != nil {
+		assert.FailNow(err.Error())
+	}
+
+	h := jsonrpc.Handler{Queries: q, Commands: c, Worker: w}
+
+	b, err := json.Marshal(h)
+	if err != nil {
+		assert.FailNow(err.Error())
+	}
+
+	ad := new(testApiDefinition)
+	if err := json.Unmarshal(b, ad); err != nil {
+		assert.FailNow(err.Error())
+	}
+
+	assert.EqualValues([]string{"test_queries"}, ad.Queries, "should have correct query description")
+	assert.EqualValues([]string{"test_commands"}, ad.Commands, "should have correct commands description")
+	assert.EqualValues([]string{"test_worker"}, ad.Worker, "should have correct worker description")
+}
+
+type testApiDefinition struct {
+	Queries  []string `json:"queries"`
+	Commands []string `json:"commands"`
+	Worker   []string `json:"worker"`
 }

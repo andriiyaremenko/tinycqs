@@ -20,9 +20,9 @@ type queries struct {
 	handlers []Handler
 }
 
-func (hf *queries) Handle(ctx context.Context,
+func (q *queries) Handle(ctx context.Context,
 	query string, payload []byte) ([]byte, error) {
-	for _, h := range hf.handlers {
+	for _, h := range q.handlers {
 		if h.QueryName() == query {
 			return h.Handle(ctx, payload)
 		}
@@ -31,9 +31,9 @@ func (hf *queries) Handle(ctx context.Context,
 	return nil, NewErrQueryHandlerNotFound(query)
 }
 
-func (hf *queries) HandleJSONEncoded(ctx context.Context,
+func (q *queries) HandleJSONEncoded(ctx context.Context,
 	query string, v interface{}, payload []byte) error {
-	b, err := hf.Handle(ctx, query, payload)
+	b, err := q.Handle(ctx, query, payload)
 	if err != nil {
 		return err
 	}
@@ -43,4 +43,13 @@ func (hf *queries) HandleJSONEncoded(ctx context.Context,
 	}
 
 	return nil
+}
+
+func (q *queries) MarshalJSON() ([]byte, error) {
+	events := make([]string, 0, 1)
+	for _, q := range q.handlers {
+		events = append(events, q.QueryName())
+	}
+
+	return json.Marshal(events)
 }

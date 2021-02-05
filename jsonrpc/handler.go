@@ -1,6 +1,7 @@
 package jsonrpc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -111,6 +112,48 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.Write(b)
 		return
 	}
+}
+
+func (h *Handler) MarshalJSON() ([]byte, error) {
+	var sb bytes.Buffer
+
+	sb.WriteString("{")
+
+	if h.Queries != nil {
+		b, err := json.Marshal(h.Queries)
+		if err != nil {
+			return nil, err
+		}
+
+		sb.WriteString(`"queries":`)
+		sb.Write(b)
+	}
+
+	if h.Commands != nil {
+		sb.WriteString(", ")
+		b, err := json.Marshal(h.Commands)
+		if err != nil {
+			return nil, err
+		}
+
+		sb.WriteString(`"commands":`)
+		sb.Write(b)
+	}
+
+	if h.Queries != nil {
+		sb.WriteString(", ")
+		b, err := json.Marshal(h.Queries)
+		if err != nil {
+			return nil, err
+		}
+
+		sb.WriteString(`"worker":`)
+		sb.Write(b)
+	}
+
+	sb.WriteString("}")
+
+	return sb.Bytes(), nil
 }
 
 func (h *Handler) handleCommand(ctx context.Context, reqModel Request, metadata command.Metadata, payload []byte) (*SuccessResponse, *ErrorResponse) {

@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 )
@@ -52,6 +53,10 @@ func (w *worker) IsRunning() bool {
 	defer w.rwMu.RUnlock()
 
 	return w.started
+}
+
+func (w *worker) MarshalJSON() ([]byte, error) {
+	return json.Marshal(w.commands)
 }
 
 func (w *worker) start() {
