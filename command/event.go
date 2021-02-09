@@ -1,7 +1,10 @@
 package command
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
+	"sync"
 )
 
 const doneWriting doneEv = doneEv("EVENT_WRITER_DONE_WRITING")
@@ -20,34 +23,53 @@ func Unwrap(event Event) Event {
 func DoneEventType(eventType string) string { return fmt.Sprintf("DONE#%s", eventType) }
 
 // Event returned as a result of successful processing Event or chain of Events.
+// If *DoneEvent is passed to EventWriter.Write it will appear in final result.
 func Done(event Event) Event { return &DoneEvent{E: event} }
 
 // returns true if event is *DoneEvent and .EventType() equals DoneEventType(eventType).
 func IsDone(event Event, eventType string) bool {
 	done, ok := event.(*DoneEvent)
-	if !ok ||
-		done.EventType() != DoneEventType(eventType) {
+	if !ok {
+		if event := Unwrap(event); event != nil {
+			return IsDone(event, eventType)
+		}
+
+		return false
+	}
+
+	if done.EventType() != DoneEventType(eventType) {
 		return false
 	}
 
 	return true
 }
 
-type doneEv string
+// returns true if event is *DoneEvent.
+func AsDoneEvent(event Event) *DoneEvent {
+	done, ok := event.(*DoneEvent)
+	if !ok {
+		if event := Unwrap(event); event != nil {
+			return AsDoneEvent(event)
+		}
 
-func (done doneEv) EventType() string {
-	return string(done)
+		return nil
+	}
+
+	return done
 }
 
-func (done doneEv) Payload() []byte {
-	return nil
+// unwraps event if event is *DoneEvent and returns it.
+// returns original event otherwise.
+func UnwrapDoneEvent(event Event) Event {
+	if done := AsDoneEvent(event); done != nil {
+		return done.Event()
+	}
+
+	return event
 }
 
-func (done doneEv) Err() error {
-	return nil
-}
-
-// DoneEvent is returned if Event was handled successfully.
+// *DoneEvent is returned by Commands.Handle if Event was handled successfully.
+// If *DoneEvent is passed to EventWriter.Write it will appear in final result.
 type DoneEvent struct {
 	E Event
 }
@@ -151,4 +173,110 @@ func (m M) CorrelationID() string {
 
 func (m M) CausationID() string {
 	return m.ECausationID
+}
+
+type EventMessage struct {
+	ID            string `json:"id"`
+	CausationID   string `json:"causationId"`
+	CorrelationID string `json:"correlationId"`
+
+	EventType string          `json:"type"`
+	Payload   json.RawMessage `json:"payload"`
+}
+
+func newResult(e Event) *result {
+	return &result{e: e}
+}
+
+type result struct {
+	mu sync.Mutex
+
+	e       Event
+	results []json.RawMessage
+	errors  []error
+}
+
+func (r *result) Append(done *DoneEvent, metadata Metadata) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	ev := done.Event()
+	message := EventMessage{
+		ID:            metadata.ID(),
+		CausationID:   metadata.CausationID(),
+		CorrelationID: metadata.CorrelationID(),
+		EventType:     ev.EventType(),
+		Payload:       ev.Payload()}
+
+	b, err := json.Marshal(message)
+	if err != nil {
+		jsonString := fmt.Sprintf(`"%s"`, string(ev.Payload()))
+		message.Payload = []byte(jsonString)
+		b, err = json.Marshal(message)
+	}
+
+	if err != nil {
+		r.errors = append(r.errors, err)
+		return
+	}
+
+	r.results = append(r.results, b)
+}
+
+func (r *result) EventType() string {
+	return r.e.EventType()
+}
+
+func (r *result) Payload() []byte {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	b, err := json.Marshal(r.results)
+
+	if err != nil {
+		return nil
+	}
+
+	return b
+}
+
+func (r *result) Err() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if len(r.errors) == 0 {
+		return nil
+	}
+
+	var sb strings.Builder
+
+	sb.WriteByte('\n')
+
+	for _, e := range r.errors {
+		sb.WriteByte('\t')
+		sb.WriteString(e.Error())
+		sb.WriteByte('\n')
+	}
+
+	return fmt.Errorf(
+		"failed to process event %s: failed to marshal results: [%s]",
+		r.e.EventType(), sb.String())
+}
+
+type doneEv string
+
+func (done doneEv) EventType() string {
+	return string(done)
+}
+
+func (done doneEv) Payload() []byte {
+	return nil
+}
+
+func (done doneEv) Err() error {
+	return nil
+}
+
+func (dine doneEv) Metadata() Metadata {
+	return nil
 }

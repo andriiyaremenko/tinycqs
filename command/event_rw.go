@@ -9,20 +9,20 @@ import (
 
 func newEventRW(ctx context.Context, limit int) EventReader {
 	ctx, cancel := context.WithCancel(ctx)
-	return &eventRW{ctx: ctx, cancel: cancel, ch: make(chan Event, limit)}
+	return &eventRW{ctx: ctx, cancel: cancel, ch: make(chan EventWithMetadata, limit)}
 }
 
 type eventRW struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	ch             chan Event
+	ch             chan EventWithMetadata
 	once           sync.Once
 	writersWG      sync.WaitGroup
 	writersWGMutex sync.Mutex
 }
 
-func (r *eventRW) Read() <-chan Event {
+func (r *eventRW) Read() <-chan EventWithMetadata {
 	return r.ch
 }
 
@@ -37,7 +37,7 @@ func (r *eventRW) Close() {
 	})
 }
 
-func (r *eventRW) write(e Event) {
+func (r *eventRW) write(e EventWithMetadata) {
 	select {
 	case <-r.ctx.Done():
 		r.Close()
@@ -80,15 +80,19 @@ type eventW struct {
 
 func (r *eventW) Write(e Event) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	if !r.isDone {
+		if withMetadata := AsEventWithMetadata(e); withMetadata != nil {
+			r.eventRW.write(WithMetadata(e, withMetadata.Metadata()))
+			return
+		}
+
 		id := uuid.New().String()
-		e = WithMetadata(e, r.metadata.New(id))
+		withMetadata := WithMetadata(e, r.metadata.New(id))
 
-		r.eventRW.write(e)
+		r.eventRW.write(withMetadata)
 	}
-
-	r.mu.Unlock()
 }
 
 func (r *eventW) Done() {

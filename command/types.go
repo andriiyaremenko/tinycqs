@@ -36,8 +36,8 @@ type EventWithMetadata interface {
 
 // Serves to pass Events to Handlers.
 type EventReader interface {
-	// Returns Event channel.
-	Read() <-chan Event
+	// Returns EventWithMetadata channel.
+	Read() <-chan EventWithMetadata
 	// Closes Event channel.
 	Close()
 

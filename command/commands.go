@@ -44,6 +44,15 @@ type commands struct {
 	cLimit   int
 }
 
+func (c *commands) MarshalJSON() ([]byte, error) {
+	events := make([]string, 0, 1)
+	for _, h := range c.handlers {
+		events = append(events, h.EventType())
+	}
+
+	return json.Marshal(events)
+}
+
 func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) Event {
 	withMetadata := AsEventWithMetadata(event)
 	if withMetadata == nil {
@@ -95,15 +104,6 @@ func (c *commands) Handle(ctx context.Context, event Event) Event {
 	return c.handleNext(ctx, event, rw)
 }
 
-func (c *commands) MarshalJSON() ([]byte, error) {
-	events := make([]string, 0, 1)
-	for _, h := range c.handlers {
-		events = append(events, h.EventType())
-	}
-
-	return json.Marshal(events)
-}
-
 func (c *commands) sealed() {}
 
 func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventReader) Event {
@@ -113,33 +113,36 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 		withMetadata = WithMetadata(initialEvent, M{EID: id, ECorrelationID: id, ECausationID: id})
 	}
 
-	initialEvent = withMetadata
-
-	h, ok := c.getHandle(initialEvent.EventType())
+	h, ok := c.getHandle(withMetadata.EventType())
 	if !ok {
-		return NewErrEvent(initialEvent, &ErrCommandHandlerNotFound{initialEvent.EventType()})
+		return NewErrEvent(withMetadata, &ErrCommandHandlerNotFound{withMetadata.EventType()})
 	}
 
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	h.Handle(ctx, rw.GetWriter(withMetadata.Metadata()), initialEvent)
+	h.Handle(ctx, rw.GetWriter(withMetadata.Metadata()), withMetadata)
 
-	errAggregated := NewErrAggregatedEvent(initialEvent)
+	errAggregated := NewErrAggregatedEvent(withMetadata)
+	results := newResult(withMetadata)
 	resultCh := make(chan Event)
 
 	go func() {
 		wg.Wait()
+		defer close(resultCh)
 
-		resultCh <- errAggregated
+		if errAggregated.Err() != nil {
+			resultCh <- errAggregated
+			return
+		}
 
-		close(resultCh)
+		resultCh <- results
 	}()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return NewErrEvent(initialEvent, ctx.Err())
+			return NewErrEvent(withMetadata, ctx.Err())
 		case event := <-rw.Read():
 			if event == doneWriting {
 				wg.Done()
@@ -149,6 +152,12 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 
 			if event == nil {
 				return NilEvent
+			}
+
+			if done := AsDoneEvent(event); done != nil {
+				results.Append(done, event.Metadata())
+
+				continue
 			}
 
 			h, ok := c.getHandle(event.EventType())
@@ -171,22 +180,16 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 				}
 			}
 
-			withMetadata := AsEventWithMetadata(event)
-			if withMetadata == nil {
-				id := uuid.New().String()
-				withMetadata = WithMetadata(event, M{EID: id, ECorrelationID: id, ECausationID: id})
-			}
-
 			select {
 			case <-ctx.Done():
 				continue
 			default:
 				wg.Add(1)
-				h.Handle(ctx, rw.GetWriter(withMetadata.Metadata()), withMetadata)
+				h.Handle(ctx, rw.GetWriter(event.Metadata()), event)
 			}
 		case r := <-resultCh:
 			if r.Err() == nil {
-				return Done(initialEvent)
+				return Done(WithMetadata(r, withMetadata.Metadata()))
 			}
 
 			return r

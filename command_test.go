@@ -2,6 +2,7 @@ package tinycqs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -50,8 +51,9 @@ func TestCommand(t *testing.T) {
 		testCommandHandleChainEventsShouldUseGlobalErrHandler)
 	t.Run("Command should restrict only one global error handler",
 		testCommandYouCanUseOnlyOneUseGlobalErrHandler)
-	t.Run("Correlation IDs should be correctly resolved in Metadata",
-		testMetadata)
+	t.Run("Command should be able to chain events and return result if *DoneEvent was written in handler",
+		testCommandHandleShouldReturnResultIfDoneEventWasWritten)
+	t.Run("Correlation IDs should be correctly resolved in Metadata", testMetadata)
 }
 
 func testCanCreateCommand(t *testing.T) {
@@ -501,6 +503,89 @@ func testCommandYouCanUseOnlyOneUseGlobalErrHandler(t *testing.T) {
 	)
 
 	assert.EqualError(err, command.MoreThanOneCatchAllErrorHandler.Error(), "error should be returned")
+}
+
+func testCommandHandleShouldReturnResultIfDoneEventWasWritten(t *testing.T) {
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	assert := assert.New(t)
+	handler1 := &command.CommandHandler{
+		EType: "test_1",
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
+			defer r.Done()
+
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+		}}
+	handler2 := &command.CommandHandler{
+		EType: "test_2",
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
+			defer r.Done()
+
+			r.Write(command.E{EType: "test_3"})
+		}}
+
+	handler3 := &command.CommandHandler{
+		EType: "test_3",
+		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
+			defer r.Done()
+
+			r.Write(command.Done(e))
+			r.Write(command.Done(command.E{EType: "done_testing", EPayload: []byte("good")}))
+		}}
+	c, _ := command.NewCommandsWithConcurrencyLimit(
+		20,
+		handler1,
+		handler2,
+		handler3,
+	)
+
+	ev := c.Handle(ctx, command.E{EType: "test_1"})
+	assert.NoError(ev.Err(), "no error should be returned")
+
+	var messages []command.EventMessage
+	err := json.Unmarshal(ev.Payload(), &messages)
+	if err != nil {
+		assert.FailNow(err.Error())
+	}
+
+	test3idRegistry := make(map[string]struct{})
+	test3count := 0
+	doneCausationRegistry := make([]string, 0, 1)
+	doneCount := 0
+
+	for _, m := range messages {
+		switch m.EventType {
+		case "test_3":
+			test3count++
+			test3idRegistry[m.ID] = struct{}{}
+		case "done_testing":
+			doneCount++
+			doneCausationRegistry = append(doneCausationRegistry, m.CausationID)
+			var p string
+
+			if err = json.Unmarshal(m.Payload, &p); err != nil {
+				assert.FailNow(err.Error())
+			}
+
+			assert.Equal("good", p, "done_testing event should have proper Payload")
+		default:
+			assert.Fail("unexpected message", m)
+		}
+	}
+
+	assert.Equal(3, test3count, "wrong test_3 events count")
+	assert.Equal(3, doneCount, "wrong done events count")
+
+	for _, id := range doneCausationRegistry {
+		if _, ok := test3idRegistry[id]; !ok {
+			assert.Fail("unexpected CorrelationID", id)
+		}
+	}
 }
 
 func testMetadata(t *testing.T) {

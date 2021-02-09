@@ -163,12 +163,7 @@ func (h *Handler) handleCommand(ctx context.Context, reqModel Request, metadata 
 	}
 
 	var ev command.Event = command.E{EType: reqModel.Method, EPayload: payload}
-	switch reqModel.ID {
-	case nil:
-		ev = h.Commands.Handle(ctx, command.WithMetadata(ev, metadata))
-	default:
-		ev = h.Commands.HandleOnly(ctx, command.WithMetadata(ev, metadata), reqModel.Method)
-	}
+	ev = h.Commands.Handle(ctx, command.WithMetadata(ev, metadata))
 
 	var errResponse *ErrorResponse
 	err := ev.Err()
@@ -187,9 +182,10 @@ func (h *Handler) handleCommand(ctx context.Context, reqModel Request, metadata 
 	}
 
 	if reqModel.ID != nil {
+		ev = command.UnwrapDoneEvent(ev)
 		result := make(map[string]interface{})
 		result["message"] = ev.EventType()
-		result["params"] = reqModel.Params
+		result["params"] = json.RawMessage(ev.Payload())
 
 		return reqModel.NewResponse(result), nil
 	}
