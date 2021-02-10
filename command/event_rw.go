@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/andriiyaremenko/tinycqs/tracing"
 	"github.com/google/uuid"
 )
 
@@ -65,7 +66,7 @@ func (r *eventRW) done() {
 	r.write(doneWriting)
 }
 
-func (r *eventRW) GetWriter(metadata Metadata) EventWriter {
+func (r *eventRW) GetWriter(metadata tracing.Metadata) EventWriter {
 	return &eventW{eventRW: r, metadata: metadata}
 }
 
@@ -75,7 +76,7 @@ type eventW struct {
 	mu     sync.Mutex
 
 	eventRW  *eventRW
-	metadata Metadata
+	metadata tracing.Metadata
 }
 
 func (r *eventW) Write(e Event) {

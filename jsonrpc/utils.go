@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/andriiyaremenko/tinycqs/command"
+	"github.com/andriiyaremenko/tinycqs/tracing"
 	"github.com/google/uuid"
 )
 
@@ -85,7 +85,7 @@ func isValid(reqModel Request) bool {
 	return true
 }
 
-func getMetadata(req *http.Request) (command.Metadata, string, string, string, bool) {
+func getMetadata(req *http.Request) (tracing.Metadata, string, string, string, bool) {
 	var id *keyValue
 	var causationID *keyValue
 	var correlationID *keyValue
@@ -107,7 +107,7 @@ func getMetadata(req *http.Request) (command.Metadata, string, string, string, b
 		return nil, "", "", "", false
 	}
 
-	metadata := command.M{
+	metadata := tracing.M{
 		EID:            id.value,
 		ECausationID:   causationID.value,
 		ECorrelationID: correlationID.value}
@@ -127,7 +127,7 @@ func writeErrorResponse(w http.ResponseWriter, errResponse *ErrorResponse) {
 	w.Write(b)
 }
 
-func addMetadata(w http.ResponseWriter, req *http.Request) command.Metadata {
+func addMetadata(w http.ResponseWriter, req *http.Request) tracing.Metadata {
 	metadata, idKey, causationIDKey, correlationIDKey, hasMetadata := getMetadata(req)
 	if hasMetadata {
 		metadata = metadata.New(uuid.New().String())
@@ -138,7 +138,7 @@ func addMetadata(w http.ResponseWriter, req *http.Request) command.Metadata {
 		causationIDKey = "CausationID"
 		correlationIDKey = "CorrelationID"
 		id := uuid.New().String()
-		metadata = command.M{EID: id, ECausationID: id, ECorrelationID: id}
+		metadata = tracing.M{EID: id, ECausationID: id, ECorrelationID: id}
 	}
 
 	w.Header().Add(idKey, metadata.ID())

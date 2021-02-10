@@ -10,6 +10,7 @@ import (
 
 	"github.com/andriiyaremenko/tinycqs/command"
 	"github.com/andriiyaremenko/tinycqs/query"
+	"github.com/andriiyaremenko/tinycqs/tracing"
 )
 
 // *Handler implements http.Handler.
@@ -47,7 +48,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for _, reqModel := range reqModels {
 		payload, err := json.Marshal(reqModel.Params)
 		if err != nil {
-			writeErrorResponse(w, reqModel.NewErrorResponse(InvalidRequest, fmt.Sprintf("request format: %s", err), nil))
+			writeErrorResponse(w,
+				reqModel.NewErrorResponse(InvalidRequest, fmt.Sprintf("request format: %s", err), nil))
 
 			return
 		}
@@ -156,7 +158,8 @@ func (h *Handler) MarshalJSON() ([]byte, error) {
 	return sb.Bytes(), nil
 }
 
-func (h *Handler) handleCommand(ctx context.Context, reqModel Request, metadata command.Metadata, payload []byte) (*SuccessResponse, *ErrorResponse) {
+func (h *Handler) handleCommand(ctx context.Context, reqModel Request,
+	metadata tracing.Metadata, payload []byte) (*SuccessResponse, *ErrorResponse) {
 	if h.Commands == nil {
 		return nil, reqModel.NewErrorResponse(MethodNotFound,
 			fmt.Sprintf("handler not found for command %s", reqModel.Method), nil)
@@ -193,14 +196,16 @@ func (h *Handler) handleCommand(ctx context.Context, reqModel Request, metadata 
 	return nil, nil
 }
 
-func (h *Handler) handleQueries(ctx context.Context, reqModel Request, metadata command.Metadata, payload []byte) (*SuccessResponse, *ErrorResponse) {
+func (h *Handler) handleQueries(ctx context.Context, reqModel Request,
+	metadata tracing.Metadata, payload []byte) (*SuccessResponse, *ErrorResponse) {
 	if h.Queries == nil {
 		return nil, reqModel.NewErrorResponse(MethodNotFound,
 			fmt.Sprintf("handler not found for query %s", reqModel.Method), nil)
 	}
 
 	if reqModel.ID == nil {
-		return nil, reqModel.NewErrorResponse(InternalError, "Queries does not support JSON-RPC Notifications", nil)
+		return nil, reqModel.NewErrorResponse(InternalError,
+			"Queries does not support JSON-RPC Notifications", nil)
 	}
 
 	var errResponse *ErrorResponse
@@ -223,14 +228,16 @@ func (h *Handler) handleQueries(ctx context.Context, reqModel Request, metadata 
 	return reqModel.NewResponse(result), nil
 }
 
-func (h *Handler) workerHandleCommand(reqModel Request, metadata command.Metadata, payload []byte) *ErrorResponse {
+func (h *Handler) workerHandleCommand(reqModel Request,
+	metadata tracing.Metadata, payload []byte) *ErrorResponse {
 	if h.Worker == nil {
 		return reqModel.NewErrorResponse(MethodNotFound,
 			fmt.Sprintf("handler not found for command %s", reqModel.Method), nil)
 	}
 
 	if reqModel.ID != nil {
-		return reqModel.NewErrorResponse(InternalError, "CommandsWorker supports only JSON-RPC Notifications", nil)
+		return reqModel.NewErrorResponse(InternalError,
+			"CommandsWorker supports only JSON-RPC Notifications", nil)
 	}
 
 	var ev command.Event = command.E{EType: reqModel.Method, EPayload: payload}

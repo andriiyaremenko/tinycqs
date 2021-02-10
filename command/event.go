@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/andriiyaremenko/tinycqs/tracing"
 )
 
 const doneWriting doneEv = doneEv("EVENT_WRITER_DONE_WRITING")
@@ -109,7 +111,7 @@ func (e E) Err() error {
 }
 
 // Adds Metadata to event.
-func WithMetadata(event Event, metadata Metadata) EventWithMetadata {
+func WithMetadata(event Event, metadata tracing.Metadata) EventWithMetadata {
 	return &eventWithMetadata{event, metadata}
 }
 
@@ -129,7 +131,7 @@ func AsEventWithMetadata(event Event) EventWithMetadata {
 
 type eventWithMetadata struct {
 	event    Event
-	metadata Metadata
+	metadata tracing.Metadata
 }
 
 func (e *eventWithMetadata) EventType() string {
@@ -144,7 +146,7 @@ func (e *eventWithMetadata) Err() error {
 	return e.event.Err()
 }
 
-func (e *eventWithMetadata) Metadata() Metadata {
+func (e *eventWithMetadata) Metadata() tracing.Metadata {
 	return e.metadata
 }
 
@@ -152,27 +154,14 @@ func (e *eventWithMetadata) Event() Event {
 	return e.event
 }
 
-// M implements Metadata.
-type M struct {
-	EID            string
-	ECorrelationID string
-	ECausationID   string
-}
+type EventResult struct {
+	ID            string `json:"id"`
+	CausationID   string `json:"causationId"`
+	CorrelationID string `json:"correlationId"`
 
-func (m M) New(id string) Metadata {
-	return M{EID: id, ECorrelationID: m.ECorrelationID, ECausationID: m.EID}
-}
-
-func (m M) ID() string {
-	return m.EID
-}
-
-func (m M) CorrelationID() string {
-	return m.ECorrelationID
-}
-
-func (m M) CausationID() string {
-	return m.ECausationID
+	EventType string          `json:"type"`
+	Payload   []byte          `json:"payload"`
+	Results   json.RawMessage `json:"results"`
 }
 
 type EventMessage struct {
@@ -184,19 +173,19 @@ type EventMessage struct {
 	Payload   json.RawMessage `json:"payload"`
 }
 
-func newResult(e Event) *result {
-	return &result{e: e}
+func newResult(event EventWithMetadata) *result {
+	return &result{event: event}
 }
 
 type result struct {
 	mu sync.Mutex
 
-	e       Event
+	event   EventWithMetadata
 	results []json.RawMessage
 	errors  []error
 }
 
-func (r *result) Append(done *DoneEvent, metadata Metadata) {
+func (r *result) Append(done *DoneEvent, metadata tracing.Metadata) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -224,14 +213,27 @@ func (r *result) Append(done *DoneEvent, metadata Metadata) {
 }
 
 func (r *result) EventType() string {
-	return r.e.EventType()
+	return r.event.EventType()
 }
 
 func (r *result) Payload() []byte {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	b, err := json.Marshal(r.results)
+	results, err := json.Marshal(r.results)
+	if err != nil {
+		return nil
+	}
+
+	metadata := r.event.Metadata()
+	payload := EventResult{
+		ID:            metadata.ID(),
+		CausationID:   metadata.CausationID(),
+		CorrelationID: metadata.CorrelationID(),
+		EventType:     DoneEventType(r.event.EventType()),
+		Payload:       r.event.Payload(),
+		Results:       results}
+	b, err := json.Marshal(payload)
 
 	if err != nil {
 		return nil
@@ -260,7 +262,11 @@ func (r *result) Err() error {
 
 	return fmt.Errorf(
 		"failed to process event %s: failed to marshal results: [%s]",
-		r.e.EventType(), sb.String())
+		r.event.EventType(), sb.String())
+}
+
+func (r *result) Event() Event {
+	return r.event
 }
 
 type doneEv string
@@ -277,6 +283,6 @@ func (done doneEv) Err() error {
 	return nil
 }
 
-func (dine doneEv) Metadata() Metadata {
+func (dine doneEv) Metadata() tracing.Metadata {
 	return nil
 }

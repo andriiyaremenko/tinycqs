@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/andriiyaremenko/tinycqs/command"
+	"github.com/andriiyaremenko/tinycqs/tracing"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
@@ -547,9 +548,13 @@ func testCommandHandleShouldReturnResultIfDoneEventWasWritten(t *testing.T) {
 	ev := c.Handle(ctx, command.E{EType: "test_1"})
 	assert.NoError(ev.Err(), "no error should be returned")
 
+	var result command.EventResult
+	if err := json.Unmarshal(ev.Payload(), &result); err != nil {
+		assert.FailNow(err.Error())
+	}
+
 	var messages []command.EventMessage
-	err := json.Unmarshal(ev.Payload(), &messages)
-	if err != nil {
+	if err := json.Unmarshal(result.Results, &messages); err != nil {
 		assert.FailNow(err.Error())
 	}
 
@@ -568,7 +573,7 @@ func testCommandHandleShouldReturnResultIfDoneEventWasWritten(t *testing.T) {
 			doneCausationRegistry = append(doneCausationRegistry, m.CausationID)
 			var p string
 
-			if err = json.Unmarshal(m.Payload, &p); err != nil {
+			if err := json.Unmarshal(m.Payload, &p); err != nil {
 				assert.FailNow(err.Error())
 			}
 
@@ -651,7 +656,7 @@ func testMetadata(t *testing.T) {
 	)
 	ev := c.Handle(ctx,
 		command.WithMetadata(command.E{EType: "test_1"},
-			command.M{EID: id, ECorrelationID: correlationID, ECausationID: causationID}))
+			tracing.M{EID: id, ECorrelationID: correlationID, ECausationID: causationID}))
 
 	assert.NoError(ev.Err(), "no error should be returned")
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/andriiyaremenko/tinycqs/tracing"
 	"github.com/google/uuid"
 )
 
@@ -57,7 +58,7 @@ func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) 
 	withMetadata := AsEventWithMetadata(event)
 	if withMetadata == nil {
 		id := uuid.New().String()
-		withMetadata = WithMetadata(event, M{EID: id, ECorrelationID: id, ECausationID: id})
+		withMetadata = WithMetadata(event, tracing.M{EID: id, ECorrelationID: id, ECausationID: id})
 	}
 
 	exists := false
@@ -110,7 +111,7 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 	withMetadata := AsEventWithMetadata(initialEvent)
 	if withMetadata == nil {
 		id := uuid.New().String()
-		withMetadata = WithMetadata(initialEvent, M{EID: id, ECorrelationID: id, ECausationID: id})
+		withMetadata = WithMetadata(initialEvent, tracing.M{EID: id, ECorrelationID: id, ECausationID: id})
 	}
 
 	h, ok := c.getHandle(withMetadata.EventType())
