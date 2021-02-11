@@ -154,16 +154,6 @@ func (e *eventWithMetadata) Event() Event {
 	return e.event
 }
 
-type EventResult struct {
-	ID            string `json:"id"`
-	CausationID   string `json:"causationId"`
-	CorrelationID string `json:"correlationId"`
-
-	EventType string          `json:"type"`
-	Payload   []byte          `json:"payload"`
-	Results   json.RawMessage `json:"results"`
-}
-
 type EventMessage struct {
 	ID            string `json:"id"`
 	CausationID   string `json:"causationId"`
@@ -226,13 +216,12 @@ func (r *result) Payload() []byte {
 	}
 
 	metadata := r.event.Metadata()
-	payload := EventResult{
+	payload := EventMessage{
 		ID:            metadata.ID(),
 		CausationID:   metadata.CausationID(),
 		CorrelationID: metadata.CorrelationID(),
 		EventType:     DoneEventType(r.event.EventType()),
-		Payload:       r.event.Payload(),
-		Results:       results}
+		Payload:       results}
 	b, err := json.Marshal(payload)
 
 	if err != nil {

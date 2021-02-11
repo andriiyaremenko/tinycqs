@@ -548,13 +548,13 @@ func testCommandHandleShouldReturnResultIfDoneEventWasWritten(t *testing.T) {
 	ev := c.Handle(ctx, command.E{EType: "test_1"})
 	assert.NoError(ev.Err(), "no error should be returned")
 
-	var result command.EventResult
+	var result command.EventMessage
 	if err := json.Unmarshal(ev.Payload(), &result); err != nil {
 		assert.FailNow(err.Error())
 	}
 
 	var messages []command.EventMessage
-	if err := json.Unmarshal(result.Results, &messages); err != nil {
+	if err := json.Unmarshal(result.Payload, &messages); err != nil {
 		assert.FailNow(err.Error())
 	}
 
