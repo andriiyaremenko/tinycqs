@@ -91,17 +91,24 @@ func writeErrorResponse(w http.ResponseWriter, errResponse *ErrorResponse) {
 }
 
 func addMetadata(w http.ResponseWriter, req *http.Request) tracing.Metadata {
+	// metadata is starting point for our execution
+	// and we should base our command execution on it
+	// respMetadata is what should be returned as a result of the whole execution pipeline
+	//																	-> some other branch of execution (next metadata value) --> ...
+	// incoming request (metadata) --> start of execution (metadata) -| --> response (next metadata value == respMetadata)
+	//																	-> some other branch of execution (next metadata value) --> ...
 	metadata, ok := tracing.GetMetadataFromHeaders(req)
+	respMetadata := metadata
 	idKey, causationIDKey, correlationIDKey := tracing.GetTracingHeaderNames(req)
 
-	// means it is not new
+	// means metadata is not new
 	if ok {
-		metadata = metadata.New(uuid.New().String())
+		respMetadata = metadata.New(uuid.New().String())
 	}
 
-	w.Header().Add(idKey, metadata.ID())
-	w.Header().Add(causationIDKey, metadata.CausationID())
-	w.Header().Add(correlationIDKey, metadata.CorrelationID())
+	w.Header().Add(idKey, respMetadata.ID())
+	w.Header().Add(causationIDKey, respMetadata.CausationID())
+	w.Header().Add(correlationIDKey, respMetadata.CorrelationID())
 
 	return metadata
 }
