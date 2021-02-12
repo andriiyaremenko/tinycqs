@@ -7,16 +7,9 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
-	"regexp"
 
 	"github.com/andriiyaremenko/tinycqs/tracing"
 	"github.com/google/uuid"
-)
-
-var (
-	regexpRequestID     = regexp.MustCompile("^(?i)id|requestid|request_id$")
-	regexpCausationID   = regexp.MustCompile("^(?i)causationid|causation_id$")
-	regexpCorrelationID = regexp.MustCompile("^(?i)correlationid|correlation_id$")
 )
 
 type keyValue struct {
@@ -85,36 +78,6 @@ func isValid(reqModel Request) bool {
 	return true
 }
 
-func getMetadata(req *http.Request) (tracing.Metadata, string, string, string, bool) {
-	var id *keyValue
-	var causationID *keyValue
-	var correlationID *keyValue
-
-	for key, v := range req.Header {
-		switch {
-		case regexpRequestID.MatchString(key):
-			id = &keyValue{key: key, value: v[0]}
-		case regexpCausationID.MatchString(key):
-			causationID = &keyValue{key: key, value: v[0]}
-		case regexpCorrelationID.MatchString(key):
-			correlationID = &keyValue{key: key, value: v[0]}
-		default:
-		}
-	}
-
-	hasMetadata := id != nil && causationID != nil && correlationID != nil
-	if !hasMetadata {
-		return nil, "", "", "", false
-	}
-
-	metadata := tracing.M{
-		EID:            id.value,
-		ECausationID:   causationID.value,
-		ECorrelationID: correlationID.value}
-
-	return metadata, id.key, causationID.key, correlationID.key, true
-}
-
 func writeErrorResponse(w http.ResponseWriter, errResponse *ErrorResponse) {
 	b, err := json.Marshal(errResponse)
 
@@ -128,17 +91,12 @@ func writeErrorResponse(w http.ResponseWriter, errResponse *ErrorResponse) {
 }
 
 func addMetadata(w http.ResponseWriter, req *http.Request) tracing.Metadata {
-	metadata, idKey, causationIDKey, correlationIDKey, hasMetadata := getMetadata(req)
-	if hasMetadata {
-		metadata = metadata.New(uuid.New().String())
-	}
+	metadata, ok := tracing.GetMetadataFromHeaders(req)
+	idKey, causationIDKey, correlationIDKey := tracing.GetTracingHeaderNames(req)
 
-	if !hasMetadata {
-		idKey = "RequestID"
-		causationIDKey = "CausationID"
-		correlationIDKey = "CorrelationID"
-		id := uuid.New().String()
-		metadata = tracing.M{EID: id, ECausationID: id, ECorrelationID: id}
+	// means it is not new
+	if ok {
+		metadata = metadata.New(uuid.New().String())
 	}
 
 	w.Header().Add(idKey, metadata.ID())
