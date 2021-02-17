@@ -116,7 +116,7 @@ func testWorkerShouldReturn404(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	w := command.NewWorker(ctx, func(e command.Event) {}, c)
+	w := command.NewWorker(ctx, func(e command.Event) {}, c, 200)
 
 	testShouldReturn404(assert, jsonrpc.CommandsWorker(w))
 }
@@ -181,7 +181,7 @@ func testWorkerShouldReturn400InvalidFormat(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	w := command.NewWorker(ctx, func(e command.Event) {}, c)
+	w := command.NewWorker(ctx, func(e command.Event) {}, c, 200)
 
 	testShouldReturn400InvalidFormat(assert, jsonrpc.CommandsWorker(w))
 }
@@ -279,7 +279,7 @@ func testWorkerShouldReturn400ExecutionError(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c)
+	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c, 200)
 	testShouldReturn400ExecutionError(assert, jsonrpc.CommandsWorker(w), notificationRequestBody, http.StatusNoContent)
 }
 
@@ -382,7 +382,7 @@ func testWorkerShouldReturn200(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c)
+	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c, 200)
 	testShouldReturn200(assert, jsonrpc.CommandsWorker(w), notificationRequestBody, http.StatusNoContent)
 }
 
@@ -477,7 +477,7 @@ func testShouldMarshalHandlerToJSON(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c1)
+	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c1, 200)
 
 	fn := func(ctx context.Context, _ []byte) ([]byte, error) {
 		return []byte(`{"result": "success"}`), nil

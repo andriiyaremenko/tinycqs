@@ -55,7 +55,7 @@ func testWorkerShouldStartAndHandleCommands(t *testing.T) {
 		t.Log(e.EventType())
 	}
 
-	w := command.NewWorker(ctx, eventSink, c)
+	w := command.NewWorker(ctx, eventSink, c, 200)
 	var wg sync.WaitGroup
 
 	wg.Add(1)
