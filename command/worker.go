@@ -98,7 +98,10 @@ func (w *worker) start() {
 				go func() {
 					defer wg.Done()
 
-					w.eventSink(w.commands.Handle(w.ctx, event))
+					ctx, cancel := context.WithCancel(w.ctx)
+
+					defer cancel()
+					w.eventSink(w.commands.Handle(ctx, event))
 				}()
 			}
 		}
