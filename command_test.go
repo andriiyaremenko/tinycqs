@@ -259,9 +259,8 @@ func testCommandHandleChainEventsShouldExhaustOrErr(t *testing.T) {
 		handler2,
 	)
 
-	err := c.Handle(ctx, command.E{EType: "test_1"})
-	assert.EqualError(err.Err(), "failed to process event test_1: aggregated error occurred: [\n\thandler not found for command test_3\n]", "error should be returned")
-	assert.IsType(&command.ErrAggregatedEvent{}, err, "error should be of type *command.ErrEvent")
+	ev := c.Handle(ctx, command.E{EType: "test_1"})
+	assert.EqualError(ev.Err(), "failed to process event test_1: aggregated error occurred: [\n\thandler not found for command test_3\n]", "error should be returned")
 }
 
 func testCommandHandleChainEventsSeveralEvents(t *testing.T) {

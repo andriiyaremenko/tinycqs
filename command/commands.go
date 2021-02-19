@@ -77,7 +77,7 @@ func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) 
 		return NewErrEvent(event, &ErrCommandHandlerNotFound{event.EventType()})
 	}
 
-	rw := newEventRW(ctx, c.cLimit)
+	rw := newEventRW(ctx)
 
 	defer rw.Close()
 
@@ -98,7 +98,7 @@ func (c *commands) HandleOnly(ctx context.Context, event Event, only ...string) 
 }
 
 func (c *commands) Handle(ctx context.Context, event Event) Event {
-	rw := newEventRW(ctx, c.cLimit)
+	rw := newEventRW(ctx)
 
 	defer rw.Close()
 
@@ -124,20 +124,21 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 	wg.Add(1)
 	h.Handle(ctx, rw.GetWriter(withMetadata.Metadata()), withMetadata)
 
-	errAggregated := NewErrAggregatedEvent(withMetadata)
 	results := newResult(withMetadata)
 	resultCh := make(chan Event)
+	eventHandleQueue := make(chan eventHandle, c.cLimit)
 
 	go func() {
 		wg.Wait()
 		defer close(resultCh)
 
-		if errAggregated.Err() != nil {
-			resultCh <- errAggregated
-			return
-		}
-
 		resultCh <- results
+	}()
+
+	go func() {
+		for evHandle := range eventHandleQueue {
+			evHandle.h.Handle(ctx, rw.GetWriter(evHandle.e.Metadata()), evHandle.e)
+		}
 	}()
 
 	for {
@@ -167,7 +168,7 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 			isUnhandledError := !ok && err != nil
 
 			if isUnhandledEvent {
-				errAggregated.Append(&ErrCommandHandlerNotFound{event.EventType()})
+				results.errors.Append(&ErrCommandHandlerNotFound{event.EventType()})
 
 				continue
 			}
@@ -175,7 +176,7 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 			if isUnhandledError {
 				h, ok = c.getHandle(CatchAllErrorEventType)
 				if !ok {
-					errAggregated.Append(err)
+					results.errors.Append(err)
 
 					continue
 				}
@@ -186,7 +187,7 @@ func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventR
 				continue
 			default:
 				wg.Add(1)
-				h.Handle(ctx, rw.GetWriter(event.Metadata()), event)
+				eventHandleQueue <- eventHandle{h: h, e: event}
 			}
 		case r := <-resultCh:
 			if r.Err() == nil {
@@ -205,4 +206,9 @@ func (c *commands) getHandle(eventType string) (Handler, bool) {
 		}
 	}
 	return nil, false
+}
+
+type eventHandle struct {
+	e EventWithMetadata
+	h Handler
 }

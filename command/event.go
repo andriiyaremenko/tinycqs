@@ -3,7 +3,6 @@ package command
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/andriiyaremenko/tinycqs/tracing"
@@ -164,7 +163,7 @@ type EventMessage struct {
 }
 
 func newResult(event EventWithMetadata) *result {
-	return &result{event: event}
+	return &result{event: event, errors: NewErrAggregatedEvent(event)}
 }
 
 type result struct {
@@ -172,7 +171,7 @@ type result struct {
 
 	event   EventWithMetadata
 	results []json.RawMessage
-	errors  []error
+	errors  *ErrAggregatedEvent
 }
 
 func (r *result) Append(done *DoneEvent, metadata tracing.Metadata) {
@@ -195,7 +194,7 @@ func (r *result) Append(done *DoneEvent, metadata tracing.Metadata) {
 	}
 
 	if err != nil {
-		r.errors = append(r.errors, err)
+		r.errors.Append(err)
 		return
 	}
 
@@ -235,23 +234,7 @@ func (r *result) Err() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if len(r.errors) == 0 {
-		return nil
-	}
-
-	var sb strings.Builder
-
-	sb.WriteByte('\n')
-
-	for _, e := range r.errors {
-		sb.WriteByte('\t')
-		sb.WriteString(e.Error())
-		sb.WriteByte('\n')
-	}
-
-	return fmt.Errorf(
-		"failed to process event %s: failed to marshal results: [%s]",
-		r.event.EventType(), sb.String())
+	return r.errors.Err()
 }
 
 func (r *result) Event() Event {

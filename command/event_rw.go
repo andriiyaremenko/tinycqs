@@ -8,9 +8,9 @@ import (
 	"github.com/google/uuid"
 )
 
-func newEventRW(ctx context.Context, limit int) EventReader {
+func newEventRW(ctx context.Context) EventReader {
 	ctx, cancel := context.WithCancel(ctx)
-	return &eventRW{ctx: ctx, cancel: cancel, ch: make(chan EventWithMetadata, limit)}
+	return &eventRW{ctx: ctx, cancel: cancel, ch: make(chan EventWithMetadata, 1)}
 }
 
 type eventRW struct {
