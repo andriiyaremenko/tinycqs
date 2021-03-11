@@ -55,6 +55,8 @@ func TestCommand(t *testing.T) {
 	t.Run("Command should be able to chain events and return result if *DoneEvent was written in handler",
 		testCommandHandleShouldReturnResultIfDoneEventWasWritten)
 	t.Run("Correlation IDs should be correctly resolved in Metadata", testMetadata)
+	t.Run("Commands should respect concurrency limit",
+		testCommandHandleShouldRespectConcurrencyLimit)
 }
 
 func testCanCreateCommand(t *testing.T) {
@@ -87,11 +89,12 @@ func testCommandShouldErrIfNoHandlersMatch(t *testing.T) {
 	c, _ := command.NewCommands(
 		command.CommandHandlerFunc("test_1", handler),
 	)
-	err := c.Handle(ctx, command.E{EType: "test_2"})
-	assert.EqualError(err.Err(), "failed to process event test_2: handler not found for command test_2", "error should be returned")
-	assert.IsType(&command.ErrEvent{}, err, "error should be of type *command.ErrEvent")
-	assert.IsType(&command.ErrCommandHandlerNotFound{}, (err.(*command.ErrEvent)).Unwrap(),
-		"underlying error should be of type *command.ErrCommandHandlerNotFound")
+	ev := c.Handle(ctx, command.E{EType: "test_2"})
+	err := ev.Err()
+	assert.EqualError(err,
+		"failed to process event test_2: aggregated error occurred: [\n\thandler not found for command test_2\n]",
+		"correct error should be returned")
+	assert.IsType(&command.ErrAggregatedEvent{}, err, "error should be of type *command.ErrAggregatedEvent")
 }
 
 func testCommandCanHandleOnlyListOfCommands(t *testing.T) {
@@ -296,7 +299,7 @@ func testCommandHandleChainEventsSeveralEvents(t *testing.T) {
 		return nil
 	}
 	c, _ := command.NewCommandsWithConcurrencyLimit(
-		20,
+		2,
 		handler1,
 		handler2,
 		command.CommandHandlerFunc("test_3", handlerFunc3),
@@ -339,15 +342,15 @@ func testCommandHandleShouldRespectContext(t *testing.T) {
 		return nil
 	}
 	c, _ := command.NewCommandsWithConcurrencyLimit(
-		20,
+		2,
 		handler1,
 		handler2,
 		command.CommandHandlerFunc("test_3", handlerFunc3),
 	)
 
-	err := c.Handle(ctx, command.E{EType: "test_1"})
-	assert.EqualError(err.Err(), "failed to process event test_1: context deadline exceeded", "error should be returned")
-	assert.IsType(&command.ErrEvent{}, err, "error should be of type *command.ErrEvent")
+	ev := c.Handle(ctx, command.E{EType: "test_1"})
+	assert.Contains(ev.Err().Error(), "context deadline exceeded", "error should be returned")
+	assert.IsType(&command.ErrAggregatedEvent{}, ev.Err(), "error should be of type *command.ErrAggregatedEvent")
 }
 
 func testCommandHandleOnlyShouldRespectContext(t *testing.T) {
@@ -413,7 +416,7 @@ func testCommandHandleChainEventsShouldUseErrorHandlers(t *testing.T) {
 			r.Done()
 		}}
 	c, _ := command.NewCommandsWithConcurrencyLimit(
-		20,
+		2,
 		handler1,
 		handler2,
 		handlerErr,
@@ -466,7 +469,7 @@ func testCommandHandleChainEventsShouldUseGlobalErrHandler(t *testing.T) {
 			r.Done()
 		}}
 	c, _ := command.NewCommandsWithConcurrencyLimit(
-		20,
+		2,
 		handler1,
 		handler2,
 		handlerErr,
@@ -538,7 +541,7 @@ func testCommandHandleShouldReturnResultIfDoneEventWasWritten(t *testing.T) {
 			r.Write(command.Done(command.E{EType: "done_testing", EPayload: []byte("good")}))
 		}}
 	c, _ := command.NewCommandsWithConcurrencyLimit(
-		20,
+		2,
 		handler1,
 		handler2,
 		handler3,
@@ -648,7 +651,7 @@ func testMetadata(t *testing.T) {
 		}}
 
 	c, _ := command.NewCommandsWithConcurrencyLimit(
-		20,
+		2,
 		handler1,
 		handler2,
 		handler3,
@@ -668,4 +671,71 @@ func testMetadata(t *testing.T) {
 		"correlation ID should equal correlationID in unwrapped done event")
 	assert.Equal(causationID, withMetadata.Metadata().CausationID(),
 		"causation ID should equal causationID in unwrapped done event")
+}
+
+func testCommandHandleShouldRespectConcurrencyLimit(t *testing.T) {
+	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
+	assert := assert.New(t)
+	counter := activeHandlersCounter{concurrentCallsLimit: 6}
+	handler1 := &command.CommandHandler{
+		EType: "test_1",
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
+			defer r.Done()
+			counter.increase(assert)
+
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+			r.Write(command.E{EType: "test_2"})
+
+			counter.decrease()
+		}}
+	handler2 := &command.CommandHandler{
+		EType: "test_2",
+		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
+			defer r.Done()
+			counter.increase(assert)
+
+			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{EType: "test_3"})
+
+			counter.decrease()
+		}}
+
+	handler3 := &command.CommandHandler{
+		EType: "test_3",
+		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
+			defer r.Done()
+			counter.increase(assert)
+			counter.decrease()
+		}}
+	c, _ := command.NewCommandsWithConcurrencyLimit(
+		2,
+		handler1,
+		handler2,
+		handler3,
+	)
+
+	ev := c.Handle(ctx, command.E{EType: "test_1"})
+	assert.NoError(ev.Err(), "no error should be returned")
 }

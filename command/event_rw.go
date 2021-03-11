@@ -10,64 +10,59 @@ import (
 
 func newEventRW(ctx context.Context) EventReader {
 	ctx, cancel := context.WithCancel(ctx)
-	return &eventRW{ctx: ctx, cancel: cancel, ch: make(chan EventWithMetadata, 1)}
+	return &eventRW{
+		ctx:           ctx,
+		cancel:        cancel,
+		closed:        false,
+		eventsChannel: make(chan EventWithMetadata, 1)}
 }
 
 type eventRW struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	ch             chan EventWithMetadata
-	once           sync.Once
-	writersWG      sync.WaitGroup
-	writersWGMutex sync.Mutex
+	eventsChannel chan EventWithMetadata
+	closed        bool
+	closedWRMutex sync.RWMutex
+	once          sync.Once
 }
 
 func (r *eventRW) Read() <-chan EventWithMetadata {
-	return r.ch
+	return r.eventsChannel
 }
 
 func (r *eventRW) Close() {
 	r.once.Do(func() {
-		r.cancel()
+		r.closedWRMutex.Lock()
 
-		r.writersWGMutex.Lock()
-		r.writersWG.Wait()
-		close(r.ch)
-		r.writersWGMutex.Unlock()
+		r.closed = true
+
+		r.closedWRMutex.Unlock()
+		r.cancel()
+		close(r.eventsChannel)
 	})
 }
 
-func (r *eventRW) write(e EventWithMetadata) {
-	select {
-	case <-r.ctx.Done():
-		r.Close()
-
-		return
-	default:
-	}
-
-	r.writersWGMutex.Lock()
-	r.writersWG.Add(1)
-	defer r.writersWG.Done()
-	defer r.writersWGMutex.Unlock()
-
-	select {
-	case <-r.ctx.Done():
-		r.Close()
-
-		return
-	case r.ch <- e:
-		return
-	}
-}
-
-func (r *eventRW) done() {
-	r.write(doneWriting)
-}
-
 func (r *eventRW) GetWriter(metadata tracing.Metadata) EventWriter {
-	return &eventW{eventRW: r, metadata: metadata}
+	events := make(chan EventWithMetadata, 1)
+	w := &eventW{eventRW: r, metadata: metadata, events: events}
+
+	go func() {
+		for e := range events {
+			r.closedWRMutex.RLock()
+
+			if r.closed {
+				r.closedWRMutex.RUnlock()
+
+				return
+			}
+
+			r.eventsChannel <- e
+			r.closedWRMutex.RUnlock()
+		}
+	}()
+
+	return w
 }
 
 type eventW struct {
@@ -75,34 +70,42 @@ type eventW struct {
 	once   sync.Once
 	mu     sync.Mutex
 
+	writeWG      sync.WaitGroup
+	writeWGMutex sync.Mutex
+
 	eventRW  *eventRW
 	metadata tracing.Metadata
+
+	events chan EventWithMetadata
 }
 
 func (r *eventW) Write(e Event) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.writeWG.Add(1)
+	go func() {
+		defer r.writeWG.Done()
+		if !r.isDone {
+			if withMetadata := AsEventWithMetadata(e); withMetadata != nil {
+				r.events <- WithMetadata(e, withMetadata.Metadata())
+				return
+			}
 
-	if !r.isDone {
-		if withMetadata := AsEventWithMetadata(e); withMetadata != nil {
-			r.eventRW.write(WithMetadata(e, withMetadata.Metadata()))
-			return
+			id := uuid.New().String()
+			withMetadata := WithMetadata(e, r.metadata.New(id))
+
+			r.events <- withMetadata
 		}
-
-		id := uuid.New().String()
-		withMetadata := WithMetadata(e, r.metadata.New(id))
-
-		r.eventRW.write(withMetadata)
-	}
+	}()
 }
 
 func (r *eventW) Done() {
-	r.once.Do(func() {
+	go r.once.Do(func() {
+		r.writeWG.Wait()
 		r.mu.Lock()
 
 		r.isDone = true
+		r.events <- doneWriting
 
-		r.eventRW.done()
+		close(r.events)
 		r.mu.Unlock()
 	})
 }

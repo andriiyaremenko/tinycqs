@@ -25,7 +25,7 @@ func DoneEventType(eventType string) string { return fmt.Sprintf("DONE#%s", even
 
 // Event returned as a result of successful processing Event or chain of Events.
 // If *DoneEvent is passed to EventWriter.Write it will appear in final result.
-func Done(event Event) Event { return &DoneEvent{E: event} }
+func Done(event Event) *DoneEvent { return &DoneEvent{E: event} }
 
 // returns true if event is *DoneEvent and .EventType() equals DoneEventType(eventType).
 func IsDone(event Event, eventType string) bool {
@@ -234,7 +234,11 @@ func (r *result) Err() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return r.errors.Err()
+	if r.errors.Err() == nil {
+		return nil
+	}
+
+	return r.errors
 }
 
 func (r *result) Event() Event {

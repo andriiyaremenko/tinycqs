@@ -10,7 +10,7 @@ import (
 )
 
 // Returns new Commands with Concurrency Limit equals to limit or error.
-// Concurrency Limit is amount of Events that can be processed concurrently.
+// Concurrency Limit is amount of Events that can be processed concurrently per each handler.
 func NewCommandsWithConcurrencyLimit(limit int, handlers ...Handler) (Commands, error) {
 	globalErrHandlersN := 0
 	for _, h := range handlers {
@@ -102,101 +102,117 @@ func (c *commands) Handle(ctx context.Context, event Event) Event {
 
 	defer rw.Close()
 
-	return c.handleNext(ctx, event, rw)
-}
-
-func (c *commands) sealed() {}
-
-func (c *commands) handleNext(ctx context.Context, initialEvent Event, rw EventReader) Event {
-	withMetadata := AsEventWithMetadata(initialEvent)
+	withMetadata := AsEventWithMetadata(event)
 	if withMetadata == nil {
 		id := uuid.New().String()
-		withMetadata = WithMetadata(initialEvent, tracing.M{EID: id, ECorrelationID: id, ECausationID: id})
+		withMetadata = WithMetadata(event, tracing.M{EID: id, ECorrelationID: id, ECausationID: id})
 	}
 
-	h, ok := c.getHandle(withMetadata.EventType())
-	if !ok {
-		return NewErrEvent(withMetadata, &ErrCommandHandlerNotFound{withMetadata.EventType()})
-	}
+	result := newResult(withMetadata)
+	c.startWorkers(ctx, rw, result)
 
-	var wg sync.WaitGroup
+	return result
+}
 
-	wg.Add(1)
-	h.Handle(ctx, rw.GetWriter(withMetadata.Metadata()), withMetadata)
-
-	results := newResult(withMetadata)
-	resultCh := make(chan Event)
-	eventHandleQueue := make(chan eventHandle, c.cLimit)
-
-	go func() {
-		wg.Wait()
-		defer close(resultCh)
-
-		resultCh <- results
-	}()
-
-	go func() {
-		for evHandle := range eventHandleQueue {
-			evHandle.h.Handle(ctx, rw.GetWriter(evHandle.e.Metadata()), evHandle.e)
+func (c *commands) startWorkers(ctx context.Context, rw EventReader, result *result) {
+	channels := make(map[string]chan EventWithMetadata)
+	for _, h := range c.handlers {
+		events := make(chan EventWithMetadata)
+		channels[h.EventType()] = events
+		for i := 0; i < c.cLimit; i++ {
+			go func(h Handler) {
+				for event := range events {
+					h.Handle(ctx, rw.GetWriter(event.Metadata()), event)
+				}
+			}(h)
 		}
-	}()
+	}
 
-	for {
+	done := make(chan struct{})
+
+	go func() {
+		var wg sync.WaitGroup
+
+		event := result.event
+		handle, ok := channels[event.EventType()]
+
+		if !ok {
+			result.errors.Append(&ErrCommandHandlerNotFound{event.EventType()})
+			close(done)
+
+			return
+		}
+
 		select {
 		case <-ctx.Done():
-			return NewErrEvent(withMetadata, ctx.Err())
-		case event := <-rw.Read():
+			result.errors.Append(ctx.Err())
+			close(done)
+
+			return
+		default:
+		}
+
+		wg.Add(1)
+		handle <- event
+
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+
+		for event := range rw.Read() {
+			if err := ctx.Err(); err != nil {
+				result.errors.Append(err)
+			}
+
 			if event == doneWriting {
 				wg.Done()
 
 				continue
 			}
 
-			if event == nil {
-				return NilEvent
+			if err := ctx.Err(); err != nil {
+				continue
 			}
 
-			if done := AsDoneEvent(event); done != nil {
-				results.Append(done, event.Metadata())
+			if event == nil {
+				result.errors.Append(NilEvent)
 
 				continue
 			}
 
-			h, ok := c.getHandle(event.EventType())
+			if done := AsDoneEvent(event); done != nil {
+				result.Append(done, event.Metadata())
+
+				continue
+			}
+
+			handle, ok := channels[event.EventType()]
 			err := event.Err()
 			isUnhandledEvent := !ok && err == nil
 			isUnhandledError := !ok && err != nil
 
 			if isUnhandledEvent {
-				results.errors.Append(&ErrCommandHandlerNotFound{event.EventType()})
+				result.errors.Append(&ErrCommandHandlerNotFound{event.EventType()})
 
 				continue
 			}
 
 			if isUnhandledError {
-				h, ok = c.getHandle(CatchAllErrorEventType)
+				handle, ok = channels[CatchAllErrorEventType]
 				if !ok {
-					results.errors.Append(err)
+					result.errors.Append(err)
 
 					continue
 				}
 			}
 
-			select {
-			case <-ctx.Done():
-				continue
-			default:
-				wg.Add(1)
-				eventHandleQueue <- eventHandle{h: h, e: event}
-			}
-		case r := <-resultCh:
-			if r.Err() == nil {
-				return Done(WithMetadata(r, withMetadata.Metadata()))
-			}
-
-			return r
+			wg.Add(1)
+			handle <- event
 		}
-	}
+	}()
+
+	<-done
 }
 
 func (c *commands) getHandle(eventType string) (Handler, bool) {
@@ -208,7 +224,4 @@ func (c *commands) getHandle(eventType string) (Handler, bool) {
 	return nil, false
 }
 
-type eventHandle struct {
-	e EventWithMetadata
-	h Handler
-}
+func (c *commands) sealed() {}
