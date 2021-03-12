@@ -245,10 +245,6 @@ func (r *result) Event() Event {
 	return r.event
 }
 
-func (r *result) Unwrap() Event {
-	return r.event
-}
-
 type doneEv string
 
 func (done doneEv) EventType() string {

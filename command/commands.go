@@ -111,7 +111,11 @@ func (c *commands) Handle(ctx context.Context, event Event) Event {
 	result := newResult(withMetadata)
 	c.startWorkers(ctx, rw, result)
 
-	return result
+	if result.Err() != nil {
+		return result
+	}
+
+	return Done(result)
 }
 
 func (c *commands) startWorkers(ctx context.Context, rw EventReader, result *result) {
