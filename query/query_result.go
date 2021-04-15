@@ -2,6 +2,7 @@ package query
 
 import "encoding/json"
 
+// Q implements QueryResult
 type Q struct {
 	Name  string
 	B     []byte
