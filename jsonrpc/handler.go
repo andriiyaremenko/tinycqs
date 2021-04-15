@@ -190,7 +190,12 @@ func (h *Handler) handleCommand(ctx context.Context, reqModel Request,
 		result["message"] = ev.EventType()
 		result["params"] = json.RawMessage(ev.Payload())
 
-		return reqModel.NewResponse(result), nil
+		b, err := json.Marshal(result)
+		if err != nil {
+			return nil, reqModel.NewErrorResponse(InternalApplicationError, err.Error(), nil)
+		}
+
+		return reqModel.NewResponse(json.RawMessage(b)), nil
 	}
 
 	return nil, nil
@@ -209,8 +214,44 @@ func (h *Handler) handleQueries(ctx context.Context, reqModel Request,
 	}
 
 	var errResponse *ErrorResponse
-	result := make(map[string]interface{})
-	err := h.Queries.HandleJSONEncoded(ctx, reqModel.Method, &result, payload)
+	results := make([]query.QueryResult, 0, 1)
+
+	for qr := range h.Queries.Handle(ctx, reqModel.Method, payload) {
+		results = append(results, qr)
+	}
+
+	var err error
+	var result json.RawMessage
+
+switchLabel:
+	switch len(results) {
+	case 0:
+		err = errors.New("something went wrong...")
+	case 1:
+		if err = results[0].Err(); err == nil {
+			result = json.RawMessage(results[0].Body())
+		}
+	default:
+		qResults := make([]json.RawMessage, 0, 1)
+		for _, qr := range results {
+			if err = qr.Err(); err != nil {
+				break switchLabel
+			}
+
+			qResult := json.RawMessage(qr.Body())
+			qResults = append(qResults, qResult)
+		}
+
+		var b []byte
+
+		b, err = json.Marshal(qResults)
+		if err != nil {
+			break switchLabel
+		}
+
+		result = json.RawMessage(b)
+	}
+
 	methodNotSupported := new(query.ErrQueryHandlerNotFound)
 
 	if errors.As(err, &methodNotSupported) {

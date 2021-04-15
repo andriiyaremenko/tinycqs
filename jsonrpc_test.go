@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -22,10 +22,8 @@ import (
 const (
 	requestBody             = `{"jsonrpc": "2.0", "id": 1, "method": "test", "params": {"test": "test"}}`
 	notificationRequestBody = `{"jsonrpc": "2.0", "method": "test", "params": {"test": "test"}}`
-	batchBody               = `[
-	{"jsonrpc": "2.0", "id": 1, "method": "test", "params": {"test": "test"}},
-	{"jsonrpc": "2.0", "method": "test_1", "params": {"test": "test"}}
-	]`
+	batchBody               = `[ {"jsonrpc": "2.0", "id": 1, "method": "test", "params": {"test": "test"}},
+								 {"jsonrpc": "2.0", "method": "test_1", "params": {"test": "test"}} ]`
 )
 
 func TestJSONRPC(t *testing.T) {
@@ -40,6 +38,7 @@ func TestQueries(t *testing.T) {
 	t.Run("Should return 400 on request with invalid format", testQueriesShouldReturn400InvalidFormat)
 	t.Run("Should return 400 on execution error", testQueriesShouldReturn400ExecutionError)
 	t.Run("Should return result on successful execution", testQueriesShouldReturn200)
+	t.Run("Should return result on successful execution for heavy queries", testQueriesShouldReturn200ForHeavyQueries)
 }
 
 func TestCommands(t *testing.T) {
@@ -116,7 +115,7 @@ func testWorkerShouldReturn404(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	w := command.NewWorker(ctx, func(e command.Event) {}, c, 200)
+	w := command.NewWorker(ctx, func(e command.Event) {}, c, http.StatusOK)
 
 	testShouldReturn404(assert, jsonrpc.CommandsWorker(w))
 }
@@ -139,7 +138,7 @@ func testShouldReturn400InvalidFormat(assert *assert.Assertions, handler http.Ha
 	req := &http.Request{
 		Method: http.MethodPost,
 		URL:    u,
-		Body:   ioutil.NopCloser(&b),
+		Body:   io.NopCloser(&b),
 		Header: http.Header{"Content-Type": []string{"application/json"}}}
 
 	resp, err := cl.Do(req)
@@ -181,7 +180,7 @@ func testWorkerShouldReturn400InvalidFormat(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	w := command.NewWorker(ctx, func(e command.Event) {}, c, 200)
+	w := command.NewWorker(ctx, func(e command.Event) {}, c, http.StatusOK)
 
 	testShouldReturn400InvalidFormat(assert, jsonrpc.CommandsWorker(w))
 }
@@ -207,7 +206,7 @@ func testShouldReturn400ExecutionError(assert *assert.Assertions, handler http.H
 	req := &http.Request{
 		Method: http.MethodPost,
 		URL:    u,
-		Body:   ioutil.NopCloser(&b),
+		Body:   io.NopCloser(&b),
 		Header: http.Header{
 			"Content-Type":   []string{"application/json"},
 			"Request_id":     []string{id},
@@ -215,8 +214,14 @@ func testShouldReturn400ExecutionError(assert *assert.Assertions, handler http.H
 			"Causation_id":   []string{causationID}}}
 	resp, err := cl.Do(req)
 
+	if err != nil {
+		assert.FailNow(err.Error())
+	}
+
+	defer resp.Body.Close()
+
 	if code == http.StatusBadRequest {
-		respBody, err := ioutil.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
 
 		if err != nil {
 			assert.FailNow(err.Error())
@@ -229,8 +234,6 @@ func testShouldReturn400ExecutionError(assert *assert.Assertions, handler http.H
 
 		assert.EqualValues(1, response.ID, "json rpc request id should equal 1")
 		assert.Equal("2.0", response.Version, `json rpc request version should equal "2.0"`)
-	} else {
-		resp.Body.Close()
 	}
 
 	assert.Equalf(code, resp.StatusCode, "should return %d", code)
@@ -279,11 +282,11 @@ func testWorkerShouldReturn400ExecutionError(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c, 200)
+	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c, http.StatusOK)
 	testShouldReturn400ExecutionError(assert, jsonrpc.CommandsWorker(w), notificationRequestBody, http.StatusNoContent)
 }
 
-func testShouldReturn200(assert *assert.Assertions, handler http.Handler, body string, code int) {
+func testShouldReturn200(assert *assert.Assertions, handler http.Handler, body string, code int, successResult string) {
 	ts := httptest.NewServer(handler)
 
 	defer ts.Close()
@@ -304,7 +307,7 @@ func testShouldReturn200(assert *assert.Assertions, handler http.Handler, body s
 	req := &http.Request{
 		Method: http.MethodPost,
 		URL:    u,
-		Body:   ioutil.NopCloser(&b),
+		Body:   io.NopCloser(&b),
 		Header: http.Header{
 			"Content-Type":   []string{"application/json"},
 			"Request_id":     []string{id},
@@ -316,30 +319,39 @@ func testShouldReturn200(assert *assert.Assertions, handler http.Handler, body s
 		assert.FailNow(err.Error())
 	}
 
+	defer resp.Body.Close()
+
 	assert.Equal(code, resp.StatusCode, fmt.Sprintf("should return %d", code))
 	assert.NotEmpty(resp.Header["Request_id"], "request id should not be empty")
 	assert.NotEqual([]string{id}, resp.Header["Request_id"], "request id should not equal incoming request id")
 	assert.Equal([]string{correlationID}, resp.Header["Correlation_id"], "correlation id should equal incoming request correlation id")
 	assert.Equal([]string{id}, resp.Header["Causation_id"], "causation id should equal incoming request id")
 
-	if code == 200 {
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		assert.FailNow(err.Error())
+	}
+
+	if code == http.StatusOK {
 		assert.Equal([]string{"application/json"}, resp.Header["Content-Type"], "Content-Type should be application/json")
 
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			assert.FailNow(err.Error())
+		response := new(jsonrpc.SuccessResponse)
+		if err := json.Unmarshal(respBody, response); err != nil {
+			assert.FailNowf("failed to read response", "%s: %s", err.Error(), string(respBody))
 		}
 
-		response := new(jsonrpc.SuccessResponse)
-		if err := json.Unmarshal(body, response); err != nil {
+		assert.Equalf(successResult, string(response.Result), `response.Result should contain %q`, successResult)
+		assert.EqualValues(1, response.ID, "json rpc request id should equal 1")
+		assert.Equal("2.0", response.Version, `json rpc request version should equal "2.0"`)
+	}
+
+	if code == http.StatusOK && resp.StatusCode != http.StatusOK {
+		response := new(jsonrpc.ErrorResponse)
+		if err := json.Unmarshal(respBody, response); err != nil {
 			assert.FailNowf("failed to read response", "%s: %s", err.Error(), string(body))
 		}
 
-		assert.Equal("success", response.Result["result"], `response.Result should contain "{"result": "sucess"}"`)
-		assert.EqualValues(1, response.ID, "json rpc request id should equal 1")
-		assert.Equal("2.0", response.Version, `json rpc request version should equal "2.0"`)
-	} else {
-		resp.Body.Close()
+		assert.Failf("expected success, got error", "%v", response)
 	}
 }
 
@@ -354,7 +366,29 @@ func testQueriesShouldReturn200(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	testShouldReturn200(assert, jsonrpc.Queries(q), requestBody, http.StatusOK)
+	testShouldReturn200(assert, jsonrpc.Queries(q), requestBody, http.StatusOK, `{"result":"success"}`)
+}
+
+func testQueriesShouldReturn200ForHeavyQueries(t *testing.T) {
+	assert := assert.New(t)
+	handler := &query.QueryHandler{
+		QName: "test",
+		HandleFunc: func(ctx context.Context, getWriter query.QueryWriterWithCancel, _ []byte) {
+			write, done := getWriter()
+
+			defer done()
+
+			write(query.Q{Name: "test_1", B: []byte(`"success 1"`)})
+			write(query.Q{Name: "test_1", B: []byte(`"success 2"`)})
+			write(query.Q{Name: "test_1", B: []byte(`"success 3"`)})
+		}}
+	q, err := query.NewQueries(handler)
+
+	if err != nil {
+		assert.FailNow(err.Error())
+	}
+
+	testShouldReturn200(assert, jsonrpc.Queries(q), requestBody, http.StatusOK, `["success 1","success 2","success 3"]`)
 }
 
 func testCommandsShouldReturn200(t *testing.T) {
@@ -368,7 +402,7 @@ func testCommandsShouldReturn200(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	testShouldReturn200(assert, jsonrpc.Commands(c), notificationRequestBody, http.StatusNoContent)
+	testShouldReturn200(assert, jsonrpc.Commands(c), notificationRequestBody, http.StatusNoContent, "")
 }
 
 func testWorkerShouldReturn200(t *testing.T) {
@@ -382,8 +416,8 @@ func testWorkerShouldReturn200(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c, 200)
-	testShouldReturn200(assert, jsonrpc.CommandsWorker(w), notificationRequestBody, http.StatusNoContent)
+	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c, http.StatusOK)
+	testShouldReturn200(assert, jsonrpc.CommandsWorker(w), notificationRequestBody, http.StatusNoContent, "")
 }
 
 func testHandlerShouldHandleBatchRequests(t *testing.T) {
@@ -426,7 +460,7 @@ func testHandlerShouldHandleBatchRequests(t *testing.T) {
 	req := &http.Request{
 		Method: http.MethodPost,
 		URL:    u,
-		Body:   ioutil.NopCloser(&b),
+		Body:   io.NopCloser(&b),
 		Header: http.Header{
 			"Content-Type":   []string{"application/json"},
 			"Request_id":     []string{id},
@@ -438,6 +472,8 @@ func testHandlerShouldHandleBatchRequests(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
+	defer resp.Body.Close()
+
 	assert.Equal(http.StatusOK, resp.StatusCode, "should return 200")
 	assert.NotEmpty(resp.Header["Request_id"], "request id should not be empty")
 	assert.NotEqual([]string{id}, resp.Header["Request_id"], "request id should not equal incoming request id")
@@ -445,7 +481,7 @@ func testHandlerShouldHandleBatchRequests(t *testing.T) {
 	assert.Equal([]string{id}, resp.Header["Causation_id"], "causation id should equal incoming request id")
 	assert.Equal([]string{"application/json"}, resp.Header["Content-Type"], "Content-Type should be application/json")
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		assert.FailNow(err.Error())
 	}
@@ -455,7 +491,7 @@ func testHandlerShouldHandleBatchRequests(t *testing.T) {
 		assert.FailNowf("failed to read response", "%s: %s", err.Error(), string(body))
 	}
 
-	assert.Equal("success", response[0].Result["result"], `response.Result should contain "{"result": "success"}"`)
+	assert.Equal(`{"result":"success"}`, string(response[0].Result), `response.Result should contain "{"result": "success"}"`)
 	assert.EqualValues(1, response[0].ID, "json rpc request id should equal 1")
 	assert.Equal("2.0", response[0].Version, `json rpc request version should equal "2.0"`)
 }
@@ -477,7 +513,7 @@ func testShouldMarshalHandlerToJSON(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c1, 200)
+	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c1, http.StatusOK)
 
 	fn := func(ctx context.Context, _ []byte) ([]byte, error) {
 		return []byte(`{"result": "success"}`), nil

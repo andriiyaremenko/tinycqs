@@ -20,29 +20,25 @@ type queries struct {
 	handlers []Handler
 }
 
-func (q *queries) Handle(ctx context.Context,
-	query string, payload []byte) ([]byte, error) {
+func (q *queries) Handle(ctx context.Context, query string, payload []byte) <-chan QueryResult {
 	for _, h := range q.handlers {
 		if h.QueryName() == query {
 			return h.Handle(ctx, payload)
 		}
 	}
 
-	return nil, NewErrQueryHandlerNotFound(query)
-}
+	result := make(chan QueryResult)
 
-func (q *queries) HandleJSONEncoded(ctx context.Context,
-	query string, v interface{}, payload []byte) error {
-	b, err := q.Handle(ctx, query, payload)
-	if err != nil {
-		return err
-	}
+	go func() {
+		result <- Q{
+			Name:  query,
+			B:     nil,
+			Error: NewErrQueryHandlerNotFound(query)}
 
-	if err := json.Unmarshal(b, v); err != nil {
-		return err
-	}
+		close(result)
+	}()
 
-	return nil
+	return result
 }
 
 func (q *queries) MarshalJSON() ([]byte, error) {

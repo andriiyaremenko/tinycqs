@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"net/http"
 
@@ -31,7 +31,7 @@ func getRequest(b []byte) ([]Request, bool, int, error) {
 }
 
 func getRequests(req *http.Request) ([]Request, bool, int, error) {
-	b, err := ioutil.ReadAll(req.Body)
+	b, err := io.ReadAll(req.Body)
 	if err != nil {
 		return nil, false, ParseError, fmt.Errorf("failed to read request body: %s", err)
 	}

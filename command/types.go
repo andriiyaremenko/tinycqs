@@ -10,9 +10,9 @@ import (
 type Event interface {
 	// Type of event. Is used to select Handler.
 	EventType() string
-	// Information needed to process Event.
+	// Information needed to process Event or returned by executing Event.
 	Payload() []byte
-	// error caused by Event.
+	// Error caused by executing Event.
 	Err() error
 }
 

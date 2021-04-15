@@ -1,6 +1,9 @@
 package jsonrpc
 
-import _ "encoding/json"
+import (
+	"encoding/json"
+	_ "encoding/json"
+)
 
 const (
 	// Invalid JSON was received by the server.
@@ -33,7 +36,7 @@ type Request struct {
 }
 
 // Returns new JSON RPC Response based on request ID and Version.
-func (r *Request) NewResponse(result map[string]interface{}) *SuccessResponse {
+func (r *Request) NewResponse(result json.RawMessage) *SuccessResponse {
 	return &SuccessResponse{
 		Version: r.Version,
 		ID:      r.ID,
@@ -58,7 +61,7 @@ type SuccessResponse struct {
 	// JSON RPC request ID.
 	ID interface{} `json:"id"`
 	// Result object.
-	Result map[string]interface{} `json:"result"`
+	Result json.RawMessage `json:"result"`
 }
 
 // JSON RPC error response model.
