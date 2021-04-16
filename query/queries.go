@@ -21,24 +21,24 @@ type queries struct {
 }
 
 func (q *queries) Handle(ctx context.Context, query string, payload []byte) <-chan QueryResult {
+	w := NewQueryResultWriter()
 	for _, h := range q.handlers {
 		if h.QueryName() == query {
-			return h.Handle(ctx, payload)
+			return h.Handle(ctx, w, payload)
 		}
 	}
 
-	result := make(chan QueryResult)
-
+	r := w.GetReader()
 	go func() {
-		result <- Q{
+		w.Write(Q{
 			Name:  query,
 			B:     nil,
-			Error: NewErrQueryHandlerNotFound(query)}
+			Error: NewErrQueryHandlerNotFound(query)})
 
-		close(result)
+		w.Done()
 	}()
 
-	return result
+	return r.Read()
 }
 
 func (q *queries) MarshalJSON() ([]byte, error) {

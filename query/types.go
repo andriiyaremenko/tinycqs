@@ -4,8 +4,6 @@ import (
 	"context"
 )
 
-type QueryWriterWithCancel func() (write func(QueryResult), done func())
-
 // Result returned by query.Handler.
 type QueryResult interface {
 	// Query name.
@@ -19,13 +17,31 @@ type QueryResult interface {
 	UnmarshalJSONBody(v interface{}) error
 }
 
+// Serves to read query results.
+type QueryResultReader interface {
+	// Reads query results.
+	Read() <-chan QueryResult
+}
+
+// Serves to write query results from handlers
+// Do NOT forget to call Done() when finished writing.
+type QueryResultWriter interface {
+	// Writes a query result
+	Write(QueryResult)
+	// Signals that handler is done writing results.
+	Done()
+
+	// Returns QueryResultReader based on this writer.
+	GetReader() QueryResultReader
+}
+
 // Handles single type of query.
 type Handler interface {
 	// Query name.
 	QueryName() string
 	// Method to handle query.
 	// Returns result of query execution.
-	Handle(ctx context.Context, payload []byte) <-chan QueryResult
+	Handle(ctx context.Context, w QueryResultWriter, payload []byte) <-chan QueryResult
 }
 
 // Interface to handle queries.

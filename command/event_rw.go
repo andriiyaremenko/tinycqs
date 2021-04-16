@@ -68,7 +68,7 @@ func (r *eventRW) GetWriter(metadata tracing.Metadata) EventWriter {
 type eventW struct {
 	isDone bool
 	once   sync.Once
-	mu     sync.Mutex
+	rwMu   sync.RWMutex
 
 	writeWG      sync.WaitGroup
 	writeWGMutex sync.Mutex
@@ -82,7 +82,10 @@ type eventW struct {
 func (r *eventW) Write(e Event) {
 	r.writeWG.Add(1)
 	go func() {
+		r.rwMu.RLock()
+		defer r.rwMu.RUnlock()
 		defer r.writeWG.Done()
+
 		if !r.isDone {
 			if withMetadata := AsEventWithMetadata(e); withMetadata != nil {
 				r.events <- WithMetadata(e, withMetadata.Metadata())
@@ -100,12 +103,12 @@ func (r *eventW) Write(e Event) {
 func (r *eventW) Done() {
 	go r.once.Do(func() {
 		r.writeWG.Wait()
-		r.mu.Lock()
+		r.rwMu.Lock()
 
 		r.isDone = true
 		r.events <- doneWriting
 
 		close(r.events)
-		r.mu.Unlock()
+		r.rwMu.Unlock()
 	})
 }

@@ -3,7 +3,6 @@ package tinycqs
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/andriiyaremenko/tinycqs/query"
@@ -88,24 +87,34 @@ func testHeavyQuery(t *testing.T) {
 	assert := assert.New(t)
 	handler := &query.QueryHandler{
 		QName: "test_1",
-		HandleFunc: func(ctx context.Context, getWriter query.QueryWriterWithCancel, _ []byte) {
-			write, done := getWriter()
+		HandleFunc: func(ctx context.Context, w query.QueryResultWriter, _ []byte) {
+			defer w.Done()
 
-			defer done()
-
-			write(query.Q{Name: "test_1", B: []byte("success 1")})
-			write(query.Q{Name: "test_1", B: []byte("success 2")})
-			write(query.Q{Name: "test_1", B: []byte("success 3")})
+			w.Write(query.Q{Name: "test_1", B: []byte("success 1")})
+			w.Write(query.Q{Name: "test_1", B: []byte("success 2")})
+			w.Write(query.Q{Name: "test_1", B: []byte("success 3")})
 		}}
 	q, _ := query.NewQueries(
 		handler,
 	)
 
-	i := 1
+	compareList := []string{"success 1", "success 2", "success 3"}
 	for qResult := range q.Handle(ctx, "test_1", nil) {
 		v, err := qResult.Body(), qResult.Err()
+		vString := string(v)
+		idx := -1
+		for i, compare := range compareList {
+			if compare == vString {
+				idx = i
+				break
+			}
+		}
 		assert.NoError(err, "no error should be returned")
-		assert.Equal(fmt.Sprintf("success %d", i), string(v))
-		i++
+		assert.Equal(compareList[idx], vString)
+		compareList = append(compareList[:idx], compareList[idx+1:]...)
+	}
+
+	if len(compareList) != 0 {
+		assert.Failf("not all results have been received", "%v", compareList)
 	}
 }

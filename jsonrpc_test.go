@@ -286,7 +286,7 @@ func testWorkerShouldReturn400ExecutionError(t *testing.T) {
 	testShouldReturn400ExecutionError(assert, jsonrpc.CommandsWorker(w), notificationRequestBody, http.StatusNoContent)
 }
 
-func testShouldReturn200(assert *assert.Assertions, handler http.Handler, body string, code int, successResult string) {
+func testShouldReturn200(assert *assert.Assertions, handler http.Handler, body string, code int, checkResult func(json.RawMessage)) {
 	ts := httptest.NewServer(handler)
 
 	defer ts.Close()
@@ -340,7 +340,7 @@ func testShouldReturn200(assert *assert.Assertions, handler http.Handler, body s
 			assert.FailNowf("failed to read response", "%s: %s", err.Error(), string(respBody))
 		}
 
-		assert.Equalf(successResult, string(response.Result), `response.Result should contain %q`, successResult)
+		checkResult(response.Result)
 		assert.EqualValues(1, response.ID, "json rpc request id should equal 1")
 		assert.Equal("2.0", response.Version, `json rpc request version should equal "2.0"`)
 	}
@@ -366,21 +366,22 @@ func testQueriesShouldReturn200(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	testShouldReturn200(assert, jsonrpc.Queries(q), requestBody, http.StatusOK, `{"result":"success"}`)
+	check := func(successResult json.RawMessage) {
+		assert.Equalf(`{"result":"success"}`, string(successResult), `response.Result should contain %q`, successResult)
+	}
+	testShouldReturn200(assert, jsonrpc.Queries(q), requestBody, http.StatusOK, check)
 }
 
 func testQueriesShouldReturn200ForHeavyQueries(t *testing.T) {
 	assert := assert.New(t)
 	handler := &query.QueryHandler{
 		QName: "test",
-		HandleFunc: func(ctx context.Context, getWriter query.QueryWriterWithCancel, _ []byte) {
-			write, done := getWriter()
+		HandleFunc: func(ctx context.Context, w query.QueryResultWriter, _ []byte) {
+			defer w.Done()
 
-			defer done()
-
-			write(query.Q{Name: "test_1", B: []byte(`"success 1"`)})
-			write(query.Q{Name: "test_1", B: []byte(`"success 2"`)})
-			write(query.Q{Name: "test_1", B: []byte(`"success 3"`)})
+			w.Write(query.Q{Name: "test_1", B: []byte(`"success 1"`)})
+			w.Write(query.Q{Name: "test_1", B: []byte(`"success 2"`)})
+			w.Write(query.Q{Name: "test_1", B: []byte(`"success 3"`)})
 		}}
 	q, err := query.NewQueries(handler)
 
@@ -388,7 +389,16 @@ func testQueriesShouldReturn200ForHeavyQueries(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	testShouldReturn200(assert, jsonrpc.Queries(q), requestBody, http.StatusOK, `["success 1","success 2","success 3"]`)
+	check := func(successResult json.RawMessage) {
+		compareList := []string{"success 1", "success 2", "success 3"}
+		var resultList []string
+		if err := json.Unmarshal(successResult, &resultList); err != nil {
+			assert.FailNow("failed to unmarshal heavy query response: %s", err)
+		}
+
+		assert.ElementsMatchf(compareList, resultList, `response.Result should contain %q`, successResult)
+	}
+	testShouldReturn200(assert, jsonrpc.Queries(q), requestBody, http.StatusOK, check)
 }
 
 func testCommandsShouldReturn200(t *testing.T) {
@@ -402,7 +412,8 @@ func testCommandsShouldReturn200(t *testing.T) {
 		assert.FailNow(err.Error())
 	}
 
-	testShouldReturn200(assert, jsonrpc.Commands(c), notificationRequestBody, http.StatusNoContent, "")
+	check := func(_ json.RawMessage) {}
+	testShouldReturn200(assert, jsonrpc.Commands(c), notificationRequestBody, http.StatusNoContent, check)
 }
 
 func testWorkerShouldReturn200(t *testing.T) {
@@ -417,7 +428,8 @@ func testWorkerShouldReturn200(t *testing.T) {
 	}
 
 	w := command.NewWorker(context.TODO(), func(e command.Event) {}, c, http.StatusOK)
-	testShouldReturn200(assert, jsonrpc.CommandsWorker(w), notificationRequestBody, http.StatusNoContent, "")
+	check := func(_ json.RawMessage) {}
+	testShouldReturn200(assert, jsonrpc.CommandsWorker(w), notificationRequestBody, http.StatusNoContent, check)
 }
 
 func testHandlerShouldHandleBatchRequests(t *testing.T) {

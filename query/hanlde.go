@@ -6,22 +6,19 @@ import (
 
 type QueryHandler struct {
 	QName      string
-	HandleFunc func(ctx context.Context, getWriter QueryWriterWithCancel, payload []byte)
+	HandleFunc func(ctx context.Context, w QueryResultWriter, payload []byte)
 }
 
 func (qh *QueryHandler) QueryName() string {
 	return qh.QName
 }
 
-func (qh *QueryHandler) Handle(ctx context.Context, payload []byte) <-chan QueryResult {
-	resultCh := make(chan QueryResult)
-	getWriter := func() (func(QueryResult), func()) {
-		return func(queryResult QueryResult) { resultCh <- queryResult }, func() { close(resultCh) }
-	}
+func (qh *QueryHandler) Handle(ctx context.Context, w QueryResultWriter, payload []byte) <-chan QueryResult {
+	r := w.GetReader()
 
-	go qh.HandleFunc(ctx, getWriter, payload)
+	go qh.HandleFunc(ctx, w, payload)
 
-	return resultCh
+	return r.Read()
 }
 
 // Returns Handler with QueryName equals queryName.
@@ -40,19 +37,19 @@ func (ch *queryHandler) QueryName() string {
 	return ch.queryName
 }
 
-func (ch *queryHandler) Handle(ctx context.Context, payload []byte) <-chan QueryResult {
-	result := make(chan QueryResult)
+func (ch *queryHandler) Handle(ctx context.Context, w QueryResultWriter, payload []byte) <-chan QueryResult {
+	r := w.GetReader()
 
 	go func() {
 		payload, err := ch.handle(ctx, payload)
 
-		result <- Q{
+		w.Write(Q{
 			Name:  ch.queryName,
 			B:     payload,
-			Error: err}
+			Error: err})
 
-		close(result)
+		w.Done()
 	}()
 
-	return result
+	return r.Read()
 }

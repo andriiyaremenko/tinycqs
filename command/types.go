@@ -34,8 +34,8 @@ type EventReader interface {
 	GetWriter(tracing.Metadata) EventWriter
 }
 
-// Servers to write Events in Handle.Handle to chain Events.
-// **Do not forget to call Done() when finished writing**.
+// Serves to write Events in Handle.Handle to chain Events.
+// Do NOT forget to call Done() when finished writing.
 type EventWriter interface {
 	// Writes Event to a channel.
 	Write(e Event)
