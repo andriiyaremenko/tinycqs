@@ -11,7 +11,7 @@ import (
 
 // Returns new Commands with Concurrency Limit equals to limit or error.
 // Concurrency Limit is amount of Events that can be processed concurrently per each handler.
-func NewCommandsWithConcurrencyLimit(limit int, handlers ...Handler) (Commands, error) {
+func NewWithConcurrencyLimit(limit int, handlers ...Handler) (Commands, error) {
 	globalErrHandlersN := 0
 	for _, h := range handlers {
 		if h.EventType() == CatchAllErrorEventType {
@@ -36,8 +36,8 @@ func NewCommandsWithConcurrencyLimit(limit int, handlers ...Handler) (Commands, 
 
 // Returns new Commands with Concurrency Limit equals to 0 or error.
 // Concurrency Limit is amount of Events that can be processed concurrently.
-func NewCommands(handlers ...Handler) (Commands, error) {
-	return NewCommandsWithConcurrencyLimit(1, handlers...)
+func New(handlers ...Handler) (Commands, error) {
+	return NewWithConcurrencyLimit(1, handlers...)
 }
 
 type commands struct {

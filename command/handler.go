@@ -4,25 +4,25 @@ import (
 	"context"
 )
 
-// *CommandHandler implements Handler.
-type CommandHandler struct {
-	EType      string
+// *BaseHandler implements Handler.
+type BaseHandler struct {
+	Type       string
 	HandleFunc func(ctx context.Context, w EventWriter, e Event)
 }
 
 // Returns EType.
-func (ch *CommandHandler) EventType() string {
-	return ch.EType
+func (ch *BaseHandler) EventType() string {
+	return ch.Type
 }
 
 // Runs HandleFunc.
-func (ch *CommandHandler) Handle(ctx context.Context, w EventWriter, event Event) {
+func (ch *BaseHandler) Handle(ctx context.Context, w EventWriter, event Event) {
 	ch.HandleFunc(ctx, w, event)
 }
 
 // Returns Handler with EventType equals eventType.
 // and Handle based on handle.
-func CommandHandlerFunc(eventType string, handle func(context.Context, []byte) error) Handler {
+func HandlerFunc(eventType string, handle func(context.Context, []byte) error) Handler {
 	return &commandHandler{eventType, handle}
 }
 

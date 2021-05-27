@@ -21,8 +21,8 @@ func testWorkerShouldStartAndHandleCommands(t *testing.T) {
 	defer cancel()
 
 	assert := assert.New(t)
-	handler1 := &command.CommandHandler{
-		EType: "test_1",
+	handler1 := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 			r.Write(command.E{EType: "test_2"})
@@ -31,8 +31,8 @@ func testWorkerShouldStartAndHandleCommands(t *testing.T) {
 			r.Write(command.E{EType: "test_3"})
 		}}
 	handler2WasCalled := &wasCalledCounter{}
-	handler2 := &command.CommandHandler{
-		EType: "test_2",
+	handler2 := &command.BaseHandler{
+		Type: "test_2",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
@@ -45,11 +45,11 @@ func testWorkerShouldStartAndHandleCommands(t *testing.T) {
 		handler3WasCalled.increase()
 		return nil
 	}
-	c, _ := command.NewCommandsWithConcurrencyLimit(
+	c, _ := command.NewWithConcurrencyLimit(
 		20,
 		handler1,
 		handler2,
-		command.CommandHandlerFunc("test_3", handlerFunc3),
+		command.HandlerFunc("test_3", handlerFunc3),
 	)
 	eventSink := func(e command.Event) {
 		t.Log(e.EventType())

@@ -87,7 +87,7 @@ func testShouldReturn404(assert *assert.Assertions, handler http.Handler) {
 func testQueriesShouldReturn404(t *testing.T) {
 	assert := assert.New(t)
 
-	q, err := query.NewQueries()
+	q, err := query.New()
 	if err != nil {
 		assert.FailNow(err.Error())
 	}
@@ -98,7 +98,7 @@ func testQueriesShouldReturn404(t *testing.T) {
 func testCommandsShouldReturn404(t *testing.T) {
 	assert := assert.New(t)
 
-	c, err := command.NewCommands()
+	c, err := command.New()
 	if err != nil {
 		assert.FailNow(err.Error())
 	}
@@ -110,7 +110,7 @@ func testWorkerShouldReturn404(t *testing.T) {
 	ctx := context.TODO()
 	assert := assert.New(t)
 
-	c, err := command.NewCommands()
+	c, err := command.New()
 	if err != nil {
 		assert.FailNow(err.Error())
 	}
@@ -153,7 +153,7 @@ func testShouldReturn400InvalidFormat(assert *assert.Assertions, handler http.Ha
 
 func testQueriesShouldReturn400InvalidFormat(t *testing.T) {
 	assert := assert.New(t)
-	q, err := query.NewQueries()
+	q, err := query.New()
 	if err != nil {
 		assert.FailNow(err.Error())
 	}
@@ -163,7 +163,7 @@ func testQueriesShouldReturn400InvalidFormat(t *testing.T) {
 
 func testCommandsShouldReturn400InvalidFormat(t *testing.T) {
 	assert := assert.New(t)
-	c, err := command.NewCommands()
+	c, err := command.New()
 	if err != nil {
 		assert.FailNow(err.Error())
 	}
@@ -175,7 +175,7 @@ func testWorkerShouldReturn400InvalidFormat(t *testing.T) {
 	ctx := context.TODO()
 	assert := assert.New(t)
 
-	c, err := command.NewCommands()
+	c, err := command.New()
 	if err != nil {
 		assert.FailNow(err.Error())
 	}
@@ -248,7 +248,7 @@ func testQueriesShouldReturn400ExecutionError(t *testing.T) {
 	fn := func(ctx context.Context, _ []byte) ([]byte, error) {
 		return nil, errors.New("fail")
 	}
-	q, err := query.NewQueries(query.QueryHandlerFunc("test", fn))
+	q, err := query.New(query.HandlerFunc("test", fn))
 
 	if err != nil {
 		assert.FailNow(err.Error())
@@ -262,7 +262,7 @@ func testCommandsShouldReturn400ExecutionError(t *testing.T) {
 	fn := func(ctx context.Context, _ []byte) error {
 		return errors.New("fail")
 	}
-	c, err := command.NewCommands(command.CommandHandlerFunc("test", fn))
+	c, err := command.New(command.HandlerFunc("test", fn))
 
 	if err != nil {
 		assert.FailNow(err.Error())
@@ -276,7 +276,7 @@ func testWorkerShouldReturn400ExecutionError(t *testing.T) {
 	fn := func(ctx context.Context, _ []byte) error {
 		return errors.New("fail")
 	}
-	c, err := command.NewCommands(command.CommandHandlerFunc("test", fn))
+	c, err := command.New(command.HandlerFunc("test", fn))
 
 	if err != nil {
 		assert.FailNow(err.Error())
@@ -360,7 +360,7 @@ func testQueriesShouldReturn200(t *testing.T) {
 	fn := func(ctx context.Context, _ []byte) ([]byte, error) {
 		return []byte(`{"result": "success"}`), nil
 	}
-	q, err := query.NewQueries(query.QueryHandlerFunc("test", fn))
+	q, err := query.New(query.HandlerFunc("test", fn))
 
 	if err != nil {
 		assert.FailNow(err.Error())
@@ -374,16 +374,16 @@ func testQueriesShouldReturn200(t *testing.T) {
 
 func testQueriesShouldReturn200ForHeavyQueries(t *testing.T) {
 	assert := assert.New(t)
-	handler := &query.QueryHandler{
-		QName: "test",
-		HandleFunc: func(ctx context.Context, w query.QueryResultWriter, _ []byte) {
+	handler := &query.BaseHandler{
+		Name: "test",
+		HandleFunc: func(ctx context.Context, w query.ResultWriter, _ []byte) {
 			defer w.Done()
 
 			w.Write(query.Q{Name: "test_1", B: []byte(`"success 1"`)})
 			w.Write(query.Q{Name: "test_1", B: []byte(`"success 2"`)})
 			w.Write(query.Q{Name: "test_1", B: []byte(`"success 3"`)})
 		}}
-	q, err := query.NewQueries(handler)
+	q, err := query.New(handler)
 
 	if err != nil {
 		assert.FailNow(err.Error())
@@ -406,7 +406,7 @@ func testCommandsShouldReturn200(t *testing.T) {
 	fn := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c, err := command.NewCommands(command.CommandHandlerFunc("test", fn))
+	c, err := command.New(command.HandlerFunc("test", fn))
 
 	if err != nil {
 		assert.FailNow(err.Error())
@@ -421,7 +421,7 @@ func testWorkerShouldReturn200(t *testing.T) {
 	fn := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c, err := command.NewCommands(command.CommandHandlerFunc("test", fn))
+	c, err := command.New(command.HandlerFunc("test", fn))
 
 	if err != nil {
 		assert.FailNow(err.Error())
@@ -437,7 +437,7 @@ func testHandlerShouldHandleBatchRequests(t *testing.T) {
 	cFn := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c, err := command.NewCommands(command.CommandHandlerFunc("test_1", cFn))
+	c, err := command.New(command.HandlerFunc("test_1", cFn))
 
 	if err != nil {
 		assert.FailNow(err.Error())
@@ -447,7 +447,7 @@ func testHandlerShouldHandleBatchRequests(t *testing.T) {
 		return []byte(`{"result": "success"}`), nil
 	}
 
-	q, err := query.NewQueries(query.QueryHandlerFunc("test", fn))
+	q, err := query.New(query.HandlerFunc("test", fn))
 	if err != nil {
 		assert.FailNow(err.Error())
 	}
@@ -513,13 +513,13 @@ func testShouldMarshalHandlerToJSON(t *testing.T) {
 	cFn := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c, err := command.NewCommands(command.CommandHandlerFunc("test_commands", cFn))
+	c, err := command.New(command.HandlerFunc("test_commands", cFn))
 
 	if err != nil {
 		assert.FailNow(err.Error())
 	}
 
-	c1, err := command.NewCommands(command.CommandHandlerFunc("test_worker", cFn))
+	c1, err := command.New(command.HandlerFunc("test_worker", cFn))
 
 	if err != nil {
 		assert.FailNow(err.Error())
@@ -531,7 +531,7 @@ func testShouldMarshalHandlerToJSON(t *testing.T) {
 		return []byte(`{"result": "success"}`), nil
 	}
 
-	q, err := query.NewQueries(query.QueryHandlerFunc("test_queries", fn))
+	q, err := query.New(query.HandlerFunc("test_queries", fn))
 	if err != nil {
 		assert.FailNow(err.Error())
 	}

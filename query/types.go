@@ -5,7 +5,7 @@ import (
 )
 
 // Result returned by query.Handler.
-type QueryResult interface {
+type Result interface {
 	// Query name.
 	QueryName() string
 	// Information returned by executing query.
@@ -18,21 +18,21 @@ type QueryResult interface {
 }
 
 // Serves to read query results.
-type QueryResultReader interface {
+type ResultReader interface {
 	// Reads query results.
-	Read() <-chan QueryResult
+	Read() <-chan Result
 }
 
 // Serves to write query results from handlers
 // Do NOT forget to call Done() when finished writing.
-type QueryResultWriter interface {
+type ResultWriter interface {
 	// Writes a query result
-	Write(QueryResult)
+	Write(Result)
 	// Signals that handler is done writing results.
 	Done()
 
 	// Returns QueryResultReader based on this writer.
-	GetReader() QueryResultReader
+	GetReader() ResultReader
 }
 
 // Handles single type of query.
@@ -41,12 +41,12 @@ type Handler interface {
 	QueryName() string
 	// Method to handle query.
 	// Returns result of query execution.
-	Handle(ctx context.Context, w QueryResultWriter, payload []byte) <-chan QueryResult
+	Handle(ctx context.Context, w ResultWriter, payload []byte) <-chan Result
 }
 
 // Interface to handle queries.
 type Queries interface {
 	// Handles query regardless of its type.
 	// Returns result of this query execution.
-	Handle(ctx context.Context, query string, payload []byte) <-chan QueryResult
+	Handle(ctx context.Context, query string, payload []byte) <-chan Result
 }

@@ -6,7 +6,7 @@ import (
 )
 
 // Returns new Queries or error.
-func NewQueries(handlers ...Handler) (Queries, error) {
+func New(handlers ...Handler) (Queries, error) {
 	for _, h := range handlers {
 		if h.QueryName() == "" {
 			return nil, &ErrIncorrectHandler{h}
@@ -20,7 +20,7 @@ type queries struct {
 	handlers []Handler
 }
 
-func (q *queries) Handle(ctx context.Context, query string, payload []byte) <-chan QueryResult {
+func (q *queries) Handle(ctx context.Context, query string, payload []byte) <-chan Result {
 	w := NewQueryResultWriter()
 	for _, h := range q.handlers {
 		if h.QueryName() == query {

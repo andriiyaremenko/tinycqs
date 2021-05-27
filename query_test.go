@@ -26,8 +26,8 @@ func testCanCreateQuery(t *testing.T) {
 	handler := func(ctx context.Context, _ []byte) ([]byte, error) {
 		return []byte("works"), nil
 	}
-	q, _ := query.NewQueries(
-		query.QueryHandlerFunc("test_1", handler),
+	q, _ := query.New(
+		query.HandlerFunc("test_1", handler),
 	)
 	qResult := <-q.Handle(ctx, "test_1", nil)
 	v, err := qResult.Body(), qResult.Err()
@@ -45,8 +45,8 @@ func testCanCreateQueryAndHandleJSONEncoded(t *testing.T) {
 	handler := func(ctx context.Context, _ []byte) ([]byte, error) {
 		return json.Marshal("works")
 	}
-	q, _ := query.NewQueries(
-		query.QueryHandlerFunc("test_1", handler),
+	q, _ := query.New(
+		query.HandlerFunc("test_1", handler),
 	)
 
 	var str string
@@ -67,8 +67,8 @@ func testQueryShouldErrIfNoHandlersMatch(t *testing.T) {
 	handler := func(ctx context.Context, _ []byte) ([]byte, error) {
 		return []byte("works"), nil
 	}
-	q, _ := query.NewQueries(
-		query.QueryHandlerFunc("test_1", handler),
+	q, _ := query.New(
+		query.HandlerFunc("test_1", handler),
 	)
 	qResult := <-q.Handle(ctx, "test_2", nil)
 	v, err := qResult.Body(), qResult.Err()
@@ -85,16 +85,16 @@ func testHeavyQuery(t *testing.T) {
 	defer cancel()
 
 	assert := assert.New(t)
-	handler := &query.QueryHandler{
-		QName: "test_1",
-		HandleFunc: func(ctx context.Context, w query.QueryResultWriter, _ []byte) {
+	handler := &query.BaseHandler{
+		Name: "test_1",
+		HandleFunc: func(ctx context.Context, w query.ResultWriter, _ []byte) {
 			defer w.Done()
 
 			w.Write(query.Q{Name: "test_1", B: []byte("success 1")})
 			w.Write(query.Q{Name: "test_1", B: []byte("success 2")})
 			w.Write(query.Q{Name: "test_1", B: []byte("success 3")})
 		}}
-	q, _ := query.NewQueries(
+	q, _ := query.New(
 		handler,
 	)
 

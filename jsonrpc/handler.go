@@ -214,7 +214,7 @@ func (h *Handler) handleQueries(ctx context.Context, reqModel Request,
 	}
 
 	var errResponse *ErrorResponse
-	results := make([]query.QueryResult, 0, 1)
+	results := make([]query.Result, 0, 1)
 
 	for qr := range h.Queries.Handle(ctx, reqModel.Method, payload) {
 		results = append(results, qr)

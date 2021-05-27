@@ -69,8 +69,8 @@ func testCanCreateCommand(t *testing.T) {
 	handler := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c, _ := command.NewCommands(
-		command.CommandHandlerFunc("test_1", handler),
+	c, _ := command.New(
+		command.HandlerFunc("test_1", handler),
 	)
 
 	assert.NoError(c.Handle(ctx, command.E{EType: "test_1"}).Err(), "no error should be returned")
@@ -86,8 +86,8 @@ func testCommandShouldErrIfNoHandlersMatch(t *testing.T) {
 	handler := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c, _ := command.NewCommands(
-		command.CommandHandlerFunc("test_1", handler),
+	c, _ := command.New(
+		command.HandlerFunc("test_1", handler),
 	)
 	ev := c.Handle(ctx, command.E{EType: "test_2"})
 	err := ev.Err()
@@ -107,8 +107,8 @@ func testCommandCanHandleOnlyListOfCommands(t *testing.T) {
 	handler := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c, _ := command.NewCommands(
-		command.CommandHandlerFunc("test_1", handler),
+	c, _ := command.New(
+		command.HandlerFunc("test_1", handler),
 	)
 
 	assert.NoError(c.HandleOnly(ctx, command.E{EType: "test_1"}, "test_1").Err(), "no error should be returned")
@@ -124,8 +124,8 @@ func testCommandHandleOnlyNotDone(t *testing.T) {
 	handler := func(ctx context.Context, _ []byte) error {
 		return errors.New("test")
 	}
-	c, _ := command.NewCommands(
-		command.CommandHandlerFunc("test_1", handler),
+	c, _ := command.New(
+		command.HandlerFunc("test_1", handler),
 	)
 
 	assert.Error(c.HandleOnly(ctx, command.E{EType: "test_1"}, "test_1").Err(), "error should be returned")
@@ -141,8 +141,8 @@ func testCommandHandleOnlyIgnoresCommandsAbsentInList(t *testing.T) {
 	handler := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c, _ := command.NewCommands(
-		command.CommandHandlerFunc("test_1", handler),
+	c, _ := command.New(
+		command.HandlerFunc("test_1", handler),
 	)
 
 	assert.NoError(c.HandleOnly(ctx, command.E{EType: "test_2"}, "test_1").Err(), "no error should be returned")
@@ -158,8 +158,8 @@ func testCommandHandleOnlyShouldErrIfNoHandlersMatch(t *testing.T) {
 	handler := func(ctx context.Context, _ []byte) error {
 		return nil
 	}
-	c, _ := command.NewCommands(
-		command.CommandHandlerFunc("test_1", handler),
+	c, _ := command.New(
+		command.HandlerFunc("test_1", handler),
 	)
 
 	err := c.HandleOnly(ctx, command.E{EType: "test_2"}, "test_1", "test_2")
@@ -175,16 +175,16 @@ func testCommandHandleOnlyShouldNotChainEvents(t *testing.T) {
 	defer cancel()
 
 	assert := assert.New(t)
-	handler1 := &command.CommandHandler{
-		EType: "test_1",
+	handler1 := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
 			r.Write(command.E{EType: "test_2"})
 		}}
 	handler2WasCalled := false
-	handler2 := &command.CommandHandler{
-		EType: "test_2",
+	handler2 := &command.BaseHandler{
+		Type: "test_2",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
@@ -192,7 +192,7 @@ func testCommandHandleOnlyShouldNotChainEvents(t *testing.T) {
 			r.Write(command.E{EType: "test_3"})
 		}}
 
-	c, _ := command.NewCommands(
+	c, _ := command.New(
 		handler1,
 		handler2,
 	)
@@ -209,23 +209,23 @@ func testCommandHandleChainEvents(t *testing.T) {
 	defer cancel()
 
 	assert := assert.New(t)
-	handler1 := &command.CommandHandler{
-		EType: "test_1",
+	handler1 := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
 			r.Write(command.E{EType: "test_2"})
 		}}
 	handler2WasCalled := false
-	handler2 := &command.CommandHandler{
-		EType: "test_2",
+	handler2 := &command.BaseHandler{
+		Type: "test_2",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
 			handler2WasCalled = true
 		}}
 
-	c, _ := command.NewCommands(
+	c, _ := command.New(
 		handler1,
 		handler2,
 	)
@@ -242,22 +242,22 @@ func testCommandHandleChainEventsShouldExhaustOrErr(t *testing.T) {
 	defer cancel()
 
 	assert := assert.New(t)
-	handler1 := &command.CommandHandler{
-		EType: "test_1",
+	handler1 := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
 			r.Write(command.E{EType: "test_2"})
 		}}
-	handler2 := &command.CommandHandler{
-		EType: "test_2",
+	handler2 := &command.BaseHandler{
+		Type: "test_2",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
 			r.Write(command.E{EType: "test_3"})
 		}}
 
-	c, _ := command.NewCommands(
+	c, _ := command.New(
 		handler1,
 		handler2,
 	)
@@ -273,8 +273,8 @@ func testCommandHandleChainEventsSeveralEvents(t *testing.T) {
 	defer cancel()
 
 	assert := assert.New(t)
-	handler1 := &command.CommandHandler{
-		EType: "test_1",
+	handler1 := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
@@ -284,8 +284,8 @@ func testCommandHandleChainEventsSeveralEvents(t *testing.T) {
 			r.Write(command.E{EType: "test_3"})
 		}}
 	handler2WasCalled := &wasCalledCounter{}
-	handler2 := &command.CommandHandler{
-		EType: "test_2",
+	handler2 := &command.BaseHandler{
+		Type: "test_2",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
@@ -298,11 +298,11 @@ func testCommandHandleChainEventsSeveralEvents(t *testing.T) {
 		handler3WasCalled.increase()
 		return nil
 	}
-	c, _ := command.NewCommandsWithConcurrencyLimit(
+	c, _ := command.NewWithConcurrencyLimit(
 		2,
 		handler1,
 		handler2,
-		command.CommandHandlerFunc("test_3", handlerFunc3),
+		command.HandlerFunc("test_3", handlerFunc3),
 	)
 
 	err := c.Handle(ctx, command.E{EType: "test_1"})
@@ -319,8 +319,8 @@ func testCommandHandleShouldRespectContext(t *testing.T) {
 
 	assert := assert.New(t)
 
-	handler1 := &command.CommandHandler{
-		EType: "test_1",
+	handler1 := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
@@ -329,8 +329,8 @@ func testCommandHandleShouldRespectContext(t *testing.T) {
 			r.Write(command.E{EType: "test_2"})
 			r.Write(command.E{EType: "test_3"})
 		}}
-	handler2 := &command.CommandHandler{
-		EType: "test_2",
+	handler2 := &command.BaseHandler{
+		Type: "test_2",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
@@ -341,11 +341,11 @@ func testCommandHandleShouldRespectContext(t *testing.T) {
 		time.Sleep(time.Millisecond * 400)
 		return nil
 	}
-	c, _ := command.NewCommandsWithConcurrencyLimit(
+	c, _ := command.NewWithConcurrencyLimit(
 		2,
 		handler1,
 		handler2,
-		command.CommandHandlerFunc("test_3", handlerFunc3),
+		command.HandlerFunc("test_3", handlerFunc3),
 	)
 
 	ev := c.Handle(ctx, command.E{EType: "test_1"})
@@ -361,15 +361,15 @@ func testCommandHandleOnlyShouldRespectContext(t *testing.T) {
 
 	assert := assert.New(t)
 
-	handler := &command.CommandHandler{
-		EType: "test_1",
+	handler := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
 			time.Sleep(time.Millisecond * 400)
 			r.Write(command.E{EType: "test_2"})
 		}}
-	c, _ := command.NewCommands(handler)
+	c, _ := command.New(handler)
 
 	err := c.HandleOnly(ctx, command.E{EType: "test_1"}, "test_1")
 	assert.EqualError(err.Err(), "failed to process event test_1: context deadline exceeded", "error should be returned")
@@ -383,8 +383,8 @@ func testCommandHandleChainEventsShouldUseErrorHandlers(t *testing.T) {
 	defer cancel()
 
 	assert := assert.New(t)
-	handler1 := &command.CommandHandler{
-		EType: "test_1",
+	handler1 := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			defer r.Done()
 
@@ -395,8 +395,8 @@ func testCommandHandleChainEventsShouldUseErrorHandlers(t *testing.T) {
 			r.Write(command.E{EType: "test_3"})
 		}}
 	handler2WasCalled := &wasCalledCounter{}
-	handler2 := &command.CommandHandler{
-		EType: "test_2",
+	handler2 := &command.BaseHandler{
+		Type: "test_2",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
@@ -410,17 +410,17 @@ func testCommandHandleChainEventsShouldUseErrorHandlers(t *testing.T) {
 		return nil
 	}
 
-	handlerErr := &command.CommandHandler{
-		EType: command.ErrorEventType("test_1"),
+	handlerErr := &command.BaseHandler{
+		Type: command.ErrorEventType("test_1"),
 		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			r.Done()
 		}}
-	c, _ := command.NewCommandsWithConcurrencyLimit(
+	c, _ := command.NewWithConcurrencyLimit(
 		2,
 		handler1,
 		handler2,
 		handlerErr,
-		command.CommandHandlerFunc("test_3", handlerFunc3),
+		command.HandlerFunc("test_3", handlerFunc3),
 	)
 
 	err := c.Handle(ctx, command.E{EType: "test_1"})
@@ -436,8 +436,8 @@ func testCommandHandleChainEventsShouldUseGlobalErrHandler(t *testing.T) {
 	defer cancel()
 
 	assert := assert.New(t)
-	handler1 := &command.CommandHandler{
-		EType: "test_1",
+	handler1 := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			defer r.Done()
 
@@ -448,8 +448,8 @@ func testCommandHandleChainEventsShouldUseGlobalErrHandler(t *testing.T) {
 			r.Write(command.E{EType: "test_3"})
 		}}
 	handler2WasCalled := &wasCalledCounter{}
-	handler2 := &command.CommandHandler{
-		EType: "test_2",
+	handler2 := &command.BaseHandler{
+		Type: "test_2",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
@@ -463,17 +463,17 @@ func testCommandHandleChainEventsShouldUseGlobalErrHandler(t *testing.T) {
 		return nil
 	}
 
-	handlerErr := &command.CommandHandler{
-		EType: command.CatchAllErrorEventType,
+	handlerErr := &command.BaseHandler{
+		Type: command.CatchAllErrorEventType,
 		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			r.Done()
 		}}
-	c, _ := command.NewCommandsWithConcurrencyLimit(
+	c, _ := command.NewWithConcurrencyLimit(
 		2,
 		handler1,
 		handler2,
 		handlerErr,
-		command.CommandHandlerFunc("test_3", handlerFunc3),
+		command.HandlerFunc("test_3", handlerFunc3),
 	)
 
 	err := c.Handle(ctx, command.E{EType: "test_1"})
@@ -489,18 +489,18 @@ func testCommandYouCanUseOnlyOneUseGlobalErrHandler(t *testing.T) {
 	defer cancel()
 
 	assert := assert.New(t)
-	handlerErr1 := &command.CommandHandler{
-		EType: command.CatchAllErrorEventType,
+	handlerErr1 := &command.BaseHandler{
+		Type: command.CatchAllErrorEventType,
 		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			r.Done()
 		}}
-	handlerErr2 := &command.CommandHandler{
-		EType: command.CatchAllErrorEventType,
+	handlerErr2 := &command.BaseHandler{
+		Type: command.CatchAllErrorEventType,
 		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			r.Done()
 		}}
 
-	_, err := command.NewCommands(
+	_, err := command.New(
 		handlerErr1,
 		handlerErr2,
 	)
@@ -515,8 +515,8 @@ func testCommandHandleShouldReturnResultIfDoneEventWasWritten(t *testing.T) {
 	defer cancel()
 
 	assert := assert.New(t)
-	handler1 := &command.CommandHandler{
-		EType: "test_1",
+	handler1 := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
@@ -524,23 +524,23 @@ func testCommandHandleShouldReturnResultIfDoneEventWasWritten(t *testing.T) {
 			r.Write(command.E{EType: "test_2"})
 			r.Write(command.E{EType: "test_2"})
 		}}
-	handler2 := &command.CommandHandler{
-		EType: "test_2",
+	handler2 := &command.BaseHandler{
+		Type: "test_2",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 
 			r.Write(command.E{EType: "test_3"})
 		}}
 
-	handler3 := &command.CommandHandler{
-		EType: "test_3",
+	handler3 := &command.BaseHandler{
+		Type: "test_3",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			defer r.Done()
 
 			r.Write(command.Done(e))
 			r.Write(command.Done(command.E{EType: "done_testing", EPayload: []byte("good")}))
 		}}
-	c, _ := command.NewCommandsWithConcurrencyLimit(
+	c, _ := command.NewWithConcurrencyLimit(
 		2,
 		handler1,
 		handler2,
@@ -605,8 +605,8 @@ func testMetadata(t *testing.T) {
 	id := uuid.New().String()
 	correlationID := uuid.New().String()
 	causationID := uuid.New().String()
-	handler1 := &command.CommandHandler{
-		EType: "test_1",
+	handler1 := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			defer r.Done()
 
@@ -623,8 +623,8 @@ func testMetadata(t *testing.T) {
 			r.Write(command.E{EType: "test_2"})
 			r.Write(command.E{EType: "test_3"})
 		}}
-	handler2 := &command.CommandHandler{
-		EType: "test_2",
+	handler2 := &command.BaseHandler{
+		Type: "test_2",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			defer r.Done()
 
@@ -638,8 +638,8 @@ func testMetadata(t *testing.T) {
 
 			r.Write(command.E{EType: "test_3"})
 		}}
-	handler3 := &command.CommandHandler{
-		EType: "test_3",
+	handler3 := &command.BaseHandler{
+		Type: "test_3",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			defer r.Done()
 
@@ -650,7 +650,7 @@ func testMetadata(t *testing.T) {
 				"correlation ID should equal correlationID in third event")
 		}}
 
-	c, _ := command.NewCommandsWithConcurrencyLimit(
+	c, _ := command.NewWithConcurrencyLimit(
 		2,
 		handler1,
 		handler2,
@@ -681,8 +681,8 @@ func testCommandHandleShouldRespectConcurrencyLimit(t *testing.T) {
 
 	assert := assert.New(t)
 	counter := activeHandlersCounter{concurrentCallsLimit: 6}
-	handler1 := &command.CommandHandler{
-		EType: "test_1",
+	handler1 := &command.BaseHandler{
+		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 			counter.increase(assert)
@@ -700,8 +700,8 @@ func testCommandHandleShouldRespectConcurrencyLimit(t *testing.T) {
 
 			counter.decrease()
 		}}
-	handler2 := &command.CommandHandler{
-		EType: "test_2",
+	handler2 := &command.BaseHandler{
+		Type: "test_2",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
 			counter.increase(assert)
@@ -722,14 +722,14 @@ func testCommandHandleShouldRespectConcurrencyLimit(t *testing.T) {
 			counter.decrease()
 		}}
 
-	handler3 := &command.CommandHandler{
-		EType: "test_3",
+	handler3 := &command.BaseHandler{
+		Type: "test_3",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, e command.Event) {
 			defer r.Done()
 			counter.increase(assert)
 			counter.decrease()
 		}}
-	c, _ := command.NewCommandsWithConcurrencyLimit(
+	c, _ := command.NewWithConcurrencyLimit(
 		2,
 		handler1,
 		handler2,

@@ -2,24 +2,24 @@ package query
 
 import "sync"
 
-func NewQueryResultWriter() QueryResultWriter {
-	return &queryResultReadWriter{ch: make(chan QueryResult)}
+func NewQueryResultWriter() ResultWriter {
+	return &queryResultReadWriter{ch: make(chan Result)}
 }
 
 type queryResultReadWriter struct {
 	isDone bool
-	ch     chan QueryResult
+	ch     chan Result
 
 	rwMu    sync.RWMutex
 	once    sync.Once
 	writeWG sync.WaitGroup
 }
 
-func (rw *queryResultReadWriter) Read() <-chan QueryResult {
+func (rw *queryResultReadWriter) Read() <-chan Result {
 	return rw.ch
 }
 
-func (rw *queryResultReadWriter) Write(queryResult QueryResult) {
+func (rw *queryResultReadWriter) Write(queryResult Result) {
 	rw.writeWG.Add(1)
 	go func() {
 		rw.rwMu.RLock()
@@ -44,6 +44,6 @@ func (rw *queryResultReadWriter) Done() {
 	})
 }
 
-func (rw *queryResultReadWriter) GetReader() QueryResultReader {
+func (rw *queryResultReadWriter) GetReader() ResultReader {
 	return rw
 }
