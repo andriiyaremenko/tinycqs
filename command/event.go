@@ -93,16 +93,16 @@ func (done *DoneEvent) Event() Event {
 
 // E implements Event.
 type E struct {
-	EType    string
-	EPayload []byte
+	Type string
+	P    []byte
 }
 
 func (e E) EventType() string {
-	return e.EType
+	return e.Type
 }
 
 func (e E) Payload() []byte {
-	return e.EPayload
+	return e.P
 }
 
 func (e E) Err() error {

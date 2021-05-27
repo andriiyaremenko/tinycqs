@@ -165,7 +165,7 @@ func (h *Handler) handleCommand(ctx context.Context, reqModel Request,
 			fmt.Sprintf("handler not found for command %s", reqModel.Method), nil)
 	}
 
-	var ev command.Event = command.E{EType: reqModel.Method, EPayload: payload}
+	var ev command.Event = command.E{Type: reqModel.Method, P: payload}
 	ev = h.Commands.Handle(ctx, command.WithMetadata(ev, metadata))
 
 	var errResponse *ErrorResponse
@@ -281,7 +281,7 @@ func (h *Handler) workerHandleCommand(reqModel Request,
 			"CommandsWorker supports only JSON-RPC Notifications", nil)
 	}
 
-	var ev command.Event = command.E{EType: reqModel.Method, EPayload: payload}
+	var ev command.Event = command.E{Type: reqModel.Method, P: payload}
 	var errResponse *ErrorResponse
 
 	if err := h.Worker.Handle(command.WithMetadata(ev, metadata)); err != nil {

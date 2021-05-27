@@ -25,10 +25,10 @@ func testWorkerShouldStartAndHandleCommands(t *testing.T) {
 		Type: "test_1",
 		HandleFunc: func(ctx context.Context, r command.EventWriter, _ command.Event) {
 			defer r.Done()
-			r.Write(command.E{EType: "test_2"})
-			r.Write(command.E{EType: "test_2"})
-			r.Write(command.E{EType: "test_2"})
-			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{Type: "test_2"})
+			r.Write(command.E{Type: "test_2"})
+			r.Write(command.E{Type: "test_2"})
+			r.Write(command.E{Type: "test_3"})
 		}}
 	handler2WasCalled := &wasCalledCounter{}
 	handler2 := &command.BaseHandler{
@@ -37,7 +37,7 @@ func testWorkerShouldStartAndHandleCommands(t *testing.T) {
 			defer r.Done()
 
 			handler2WasCalled.increase()
-			r.Write(command.E{EType: "test_3"})
+			r.Write(command.E{Type: "test_3"})
 		}}
 
 	handler3WasCalled := &wasCalledCounter{}
@@ -61,14 +61,14 @@ func testWorkerShouldStartAndHandleCommands(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.Handle(command.E{EType: "test_1"})
+		err := w.Handle(command.E{Type: "test_1"})
 		assert.NoError(err, "no error should be returned")
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.Handle(command.E{EType: "test_1"})
+		err := w.Handle(command.E{Type: "test_1"})
 		assert.NoError(err, "no error should be returned")
 	}()
 
