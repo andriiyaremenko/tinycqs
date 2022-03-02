@@ -13,7 +13,7 @@ var (
 
 // Returns CommandWorker based on Commands.
 // eventSink is used to channel all unhandled errors in form of Event.
-func NewWorker(ctx context.Context, eventSink func(Event), commands Commands, limit int) CommandsWorker {
+func NewWorker(ctx context.Context, eventSink func(CommandsWorker, Event), commands Commands, limit int) CommandsWorker {
 	if limit < 1 {
 		limit = 1
 	}
@@ -37,7 +37,7 @@ type worker struct {
 	started   bool
 	commands  Commands
 	eventPipe chan Event
-	eventSink func(event Event)
+	eventSink func(CommandsWorker, Event)
 	cLimit    int
 }
 
@@ -101,7 +101,7 @@ func (w *worker) start() {
 					ctx, cancel := context.WithCancel(w.ctx)
 
 					defer cancel()
-					w.eventSink(w.commands.Handle(ctx, event))
+					w.eventSink(w, w.commands.Handle(ctx, event))
 				}()
 			}
 		}
