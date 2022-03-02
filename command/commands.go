@@ -123,7 +123,13 @@ func (c *commands) startWorkers(ctx context.Context, rw EventReader, result *res
 	for _, h := range c.handlers {
 		events := make(chan EventWithMetadata)
 		channels[h.EventType()] = events
-		for i := 0; i < c.cLimit; i++ {
+
+		workers := h.Workers()
+		if workers == 0 {
+			workers = c.cLimit
+		}
+
+		for i := 0; i < workers; i++ {
 			go func(h Handler) {
 				for event := range events {
 					h.Handle(ctx, rw.GetWriter(event.Metadata()), event)

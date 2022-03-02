@@ -8,6 +8,7 @@ import (
 type BaseHandler struct {
 	Type       string
 	HandleFunc func(ctx context.Context, w EventWriter, e Event)
+	NWorkers   int
 }
 
 // Returns EType.
@@ -18,6 +19,10 @@ func (ch *BaseHandler) EventType() string {
 // Runs HandleFunc.
 func (ch *BaseHandler) Handle(ctx context.Context, w EventWriter, event Event) {
 	ch.HandleFunc(ctx, w, event)
+}
+
+func (ch *BaseHandler) Workers() int {
+	return ch.NWorkers
 }
 
 // Returns Handler with EventType equals eventType.
@@ -51,4 +56,8 @@ func (ch *commandHandler) Handle(ctx context.Context, w EventWriter, event Event
 
 		return
 	}
+}
+
+func (ch *commandHandler) Workers() int {
+	return 0
 }

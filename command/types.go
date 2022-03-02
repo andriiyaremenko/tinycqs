@@ -49,6 +49,8 @@ type Handler interface {
 	EventType() string
 	// Method to handle Events.
 	Handle(ctx context.Context, w EventWriter, event Event)
+	// Parallel workers
+	Workers() int
 }
 
 // Sealed interface to handle Events.
