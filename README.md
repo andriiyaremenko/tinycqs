@@ -1,3 +1,6 @@
+# This package is archived!
+# It's complete rework and development was moved to the new library: https://github.com/andriiyaremenko/pipelines 
+
 # tinycqs
 
 This package is intended to help user separate ones workflow on commands and queries (CQS part of CQRS).  
